@@ -30,7 +30,10 @@
 #include "esp_sntp.h"
 #include "http.hpp"
 
-#if !defined(EBUS_INTERNAL)
+#if defined(EBUS_INTERNAL)
+ebus::ebusConfig ebusConfig;
+ebus::Controller ebusController;
+#else
 TaskHandle_t Task1;
 #endif
 
@@ -85,7 +88,8 @@ enum class AdapterHwVersionEfuse : uint8_t {
 };
 
 static constexpr size_t ADAPTER_HW_VERSION_EFUSE_BITS = 8;
-static constexpr size_t ADAPTER_HW_VERSION_EFUSE_OFFSET = 248;  // BLOCK3 bit 248..255
+// BLOCK3 bit 248..255
+static constexpr size_t ADAPTER_HW_VERSION_EFUSE_OFFSET = 248;
 
 static const esp_efuse_desc_t ADAPTER_HW_VERSION_EFUSE_DESC = {
     EFUSE_BLK3, ADAPTER_HW_VERSION_EFUSE_OFFSET, ADAPTER_HW_VERSION_EFUSE_BITS};
@@ -144,7 +148,8 @@ void calcUniqueId() {
 }
 
 std::string formatAdapterHwVersion(const uint8_t raw) {
-  if (static_cast<AdapterHwVersionEfuse>(raw) == AdapterHwVersionEfuse::PRE_7_0) {
+  if (static_cast<AdapterHwVersionEfuse>(raw) ==
+      AdapterHwVersionEfuse::PRE_7_0) {
     return "pre-7.0";
   }
 
@@ -161,9 +166,8 @@ std::string formatAdapterHwVersion(const uint8_t raw) {
 
 void loadAdapterHwVersionFromEfuse() {
   uint8_t raw;
-  const esp_err_t err =
-      esp_efuse_read_field_blob(ADAPTER_HW_VERSION_EFUSE_FIELD, &raw,
-                                ADAPTER_HW_VERSION_EFUSE_BITS);
+  const esp_err_t err = esp_efuse_read_field_blob(
+      ADAPTER_HW_VERSION_EFUSE_FIELD, &raw, ADAPTER_HW_VERSION_EFUSE_BITS);
   if (err != ESP_OK) {
     adapterHwVersionRaw = 0xEE;
     adapterHwVersion = "reading error";
@@ -307,15 +311,17 @@ void saveParamsCallback() {
 
 #if defined(EBUS_INTERNAL)
   String ebusAddress = configManager.readString("ebusAddress", "ff");
-  ebus::handler->setSourceAddress(
+  ebusController.setAddress(
       uint8_t(std::strtoul(ebusAddress.c_str(), nullptr, 16)));
-  ebus::setBusIsrWindow(configManager.readInt("busisrWindow", 4300));
-  ebus::setBusIsrOffset(configManager.readInt("busisrOffset", 80));
+  ebusController.setWindow(configManager.readInt("busisrWindow", 4300));
+  ebusController.setOffset(configManager.readInt("busisrOffset", 80));
 
   if (configManager.readBool("sntpEnabled")) {
     esp_sntp_stop();
-    initSNTP(configManager.readString("sntpServer", DEFAULT_SNTP_SERVER).c_str());
-    setTimezone(configManager.readString("sntpTimezone", DEFAULT_SNTP_TIMEZONE).c_str());
+    initSNTP(
+        configManager.readString("sntpServer", DEFAULT_SNTP_SERVER).c_str());
+    setTimezone(configManager.readString("sntpTimezone", DEFAULT_SNTP_TIMEZONE)
+                    .c_str());
   } else {
     esp_sntp_stop();
   }
@@ -440,9 +446,8 @@ char* status_string() {
   String mqttUserValue = configManager.readString("mqttUser");
   pos += snprintf(status + pos, bufferSize - pos, "mqtt_server: %s\r\n",
                   mqttServerValue.c_str());
-  pos +=
-      snprintf(status + pos, bufferSize - pos, "mqtt_user: %s\r\n",
-               mqttUserValue.c_str());
+  pos += snprintf(status + pos, bufferSize - pos, "mqtt_user: %s\r\n",
+                  mqttUserValue.c_str());
   pos +=
       snprintf(status + pos, bufferSize - pos, "mqtt_publish_counter: %s\r\n",
                schedule.getPublishCounter() ? "true" : "false");
@@ -537,11 +542,12 @@ const std::string getStatusJson() {
   JsonObject SNTP = doc["SNTP"].to<JsonObject>();
   SNTP["Enabled"] = configManager.readBool("sntpEnabled");
   const char* activeSntpServer = esp_sntp_getservername(0);
-  SNTP["Server"] = activeSntpServer != nullptr
-                       ? activeSntpServer
-                       : configManager.readString("sntpServer",
-                                                  DEFAULT_SNTP_SERVER);
-  SNTP["Timezone"] = configManager.readString("sntpTimezone", DEFAULT_SNTP_TIMEZONE);
+  SNTP["Server"] =
+      activeSntpServer != nullptr
+          ? activeSntpServer
+          : configManager.readString("sntpServer", DEFAULT_SNTP_SERVER);
+  SNTP["Timezone"] =
+      configManager.readString("sntpTimezone", DEFAULT_SNTP_TIMEZONE);
 #endif
 
   // eBUS
@@ -581,7 +587,9 @@ const std::string getStatusJson() {
   return payload;
 }
 
-bool isCaptivePortalActive() { return wifiNetworkManager.isCaptivePortalActive(); }
+bool isCaptivePortalActive() {
+  return wifiNetworkManager.isCaptivePortalActive();
+}
 
 bool handleStatusServerRequests() {
   if (!statusServer.hasClient()) return false;
@@ -609,9 +617,7 @@ void setup() {
   calcUniqueId();
   loadAdapterHwVersionFromEfuse();
 
-#if defined(EBUS_INTERNAL)
-  ebus::setupBusIsr(UART_NUM_1, UART_RX, UART_TX, 1, 0);
-#else
+#if !defined(EBUS_INTERNAL)
   Bus.begin();
 #endif
 
@@ -629,7 +635,7 @@ void setup() {
   configServer.begin();
   upgradeManager.setPreUpgradeHook([]() {
 #if defined(EBUS_INTERNAL)
-    ebus::serviceRunner->stop();
+    ebusController.stop();
     schedule.stop();
     clientManager.stop();
 #else
@@ -641,7 +647,7 @@ void setup() {
   });
   espOtaManager.setPreUpgradeHook([]() {
 #if defined(EBUS_INTERNAL)
-    ebus::serviceRunner->stop();
+    ebusController.stop();
     schedule.stop();
     clientManager.stop();
 #else
@@ -656,7 +662,8 @@ void setup() {
 
 #if defined(EBUS_INTERNAL)
   if (configManager.readBool("sntpEnabled")) {
-    String sntpServerValue = configManager.readString("sntpServer", DEFAULT_SNTP_SERVER);
+    String sntpServerValue =
+        configManager.readString("sntpServer", DEFAULT_SNTP_SERVER);
     String sntpTimezoneValue =
         configManager.readString("sntpTimezone", DEFAULT_SNTP_TIMEZONE);
     initSNTP(sntpServerValue.c_str());
@@ -677,7 +684,8 @@ void setup() {
   mqttha.setWillTopic(mqtt.getWillTopic());
   mqttha.setEnabled(configManager.readBool("haEnabledParam"));
 
-  mqttha.setThingName(configManager.readString("thingName", "esp-eBus").c_str());
+  mqttha.setThingName(
+      configManager.readString("thingName", "esp-eBus").c_str());
   mqttha.setThingModel(ESP.getChipModel());
   mqttha.setThingModelId("Revision: " + std::to_string(ESP.getChipRevision()));
   mqttha.setThingManufacturer("danman.eu");
@@ -702,13 +710,23 @@ void setup() {
   enableTX();
 
 #if defined(EBUS_INTERNAL)
-  String ebusAddress = configManager.readString("ebusAddress", "ff");
-  ebus::handler->setSourceAddress(
-      uint8_t(std::strtoul(ebusAddress.c_str(), nullptr, 16)));
-  ebus::setBusIsrWindow(configManager.readInt("busisrWindow", 4300));
-  ebus::setBusIsrOffset(configManager.readInt("busisrOffset", 80));
+  ebus::busConfig busConfig = {.uart_port = UART_NUM_1,
+                               .rx_pin = UART_RX,
+                               .tx_pin = UART_TX,
+                               .timer_group = 1,
+                               .timer_idx = 0};
 
-  deviceManager.setEbusHandler(ebus::handler);
+  ebusConfig.address = uint8_t(std::strtoul(
+      configManager.readString("ebusAddress", "ff").c_str(), nullptr, 16));
+  ebusConfig.window = configManager.readInt("busisrWindow", 4300);
+  ebusConfig.offset = configManager.readInt("busisrOffset", 80);
+  ebusConfig.bus = busConfig;
+
+  ebusController.configure(ebusConfig);
+
+  ebusController.start();
+
+  deviceManager.setEbusHandler(ebusController.getHandler());
   deviceManager.setScanOnStartup(configManager.readBool("scanOnStartPrm"));
 
   schedule.setSendInquiryOfExistence(configManager.readBool("inquiryExistPrm"));
@@ -716,12 +734,12 @@ void setup() {
       configManager.readInt("firstCmdAfterSt", 10));
   schedule.setPublishCounter(configManager.readBool("mqttPublishCnt"));
   schedule.setPublishTiming(configManager.readBool("mqttPublishTmg"));
-  schedule.start(ebus::request, ebus::handler);
-
-  ebus::serviceRunner->start();
+  schedule.start(ebusController.getBus(), ebusController.getRequest(),
+                 ebusController.getHandler());
 
   clientManager.setLastCommsCallback(updateLastComms);
-  clientManager.start(ebus::bus, ebus::request, ebus::serviceRunner);
+  clientManager.start(ebusController.getBus(), ebusController.getByteHandler(),
+                      ebusController.getRequest());
 
   store.setDataUpdatedCallback(Mqtt::publishValue);
   store.setDataUpdatedLogCallback(

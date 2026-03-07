@@ -343,32 +343,53 @@ const double Command::getDoubleFromVector() const {
     case ebus::DataType::INT8:
       value = ebus::byte_2_int8(data);
       break;
-    case ebus::DataType::UINT16:
-      value = ebus::byte_2_uint16(data);
-      break;
-    case ebus::DataType::INT16:
-      value = ebus::byte_2_int16(data);
-      break;
-    case ebus::DataType::UINT32:
-      value = ebus::byte_2_uint32(data);
-      break;
-    case ebus::DataType::INT32:
-      value = ebus::byte_2_int32(data);
-      break;
     case ebus::DataType::DATA1B:
       value = ebus::byte_2_data1b(data);
       break;
     case ebus::DataType::DATA1C:
       value = ebus::byte_2_data1c(data);
       break;
+    case ebus::DataType::UINT16:
+      value = ebus::byte_2_uint16(data, ebus::Endian::Little);
+      break;
+    case ebus::DataType::UINT16R:
+      value = ebus::byte_2_uint16(data, ebus::Endian::Big);
+      break;
+    case ebus::DataType::INT16:
+      value = ebus::byte_2_int16(data, ebus::Endian::Little);
+      break;
+    case ebus::DataType::INT16R:
+      value = ebus::byte_2_int16(data, ebus::Endian::Big);
+      break;
     case ebus::DataType::DATA2B:
-      value = ebus::byte_2_data2b(data);
+      value = ebus::byte_2_data2b(data, ebus::Endian::Little);
+      break;
+    case ebus::DataType::DATA2BR:
+      value = ebus::byte_2_data2b(data, ebus::Endian::Big);
       break;
     case ebus::DataType::DATA2C:
-      value = ebus::byte_2_data2c(data);
+      value = ebus::byte_2_data2c(data, ebus::Endian::Little);
+      break;
+    case ebus::DataType::DATA2CR:
+      value = ebus::byte_2_data2c(data, ebus::Endian::Big);
+      break;
+    case ebus::DataType::UINT32:
+      value = ebus::byte_2_uint32(data, ebus::Endian::Little);
+      break;
+    case ebus::DataType::UINT32R:
+      value = ebus::byte_2_uint32(data, ebus::Endian::Big);
+      break;
+    case ebus::DataType::INT32:
+      value = ebus::byte_2_int32(data, ebus::Endian::Little);
+      break;
+    case ebus::DataType::INT32R:
+      value = ebus::byte_2_int32(data, ebus::Endian::Big);
       break;
     case ebus::DataType::FLOAT:
-      value = ebus::byte_2_float(data);
+      value = ebus::byte_2_float(data, ebus::Endian::Little);
+      break;
+    case ebus::DataType::FLOATR:
+      value = ebus::byte_2_float(data, ebus::Endian::Big);
       break;
     default:
       break;
@@ -427,32 +448,53 @@ const std::vector<uint8_t> Command::getVectorFromDouble(double value) const {
     case ebus::DataType::INT8:
       result = ebus::int8_2_byte(value);
       break;
-    case ebus::DataType::UINT16:
-      result = ebus::uint16_2_byte(value);
-      break;
-    case ebus::DataType::INT16:
-      result = ebus::int16_2_byte(value);
-      break;
-    case ebus::DataType::UINT32:
-      result = ebus::uint32_2_byte(value);
-      break;
-    case ebus::DataType::INT32:
-      result = ebus::int32_2_byte(value);
-      break;
     case ebus::DataType::DATA1B:
       result = ebus::data1b_2_byte(value);
       break;
     case ebus::DataType::DATA1C:
       result = ebus::data1c_2_byte(value);
       break;
+    case ebus::DataType::UINT16:
+      result = ebus::uint16_2_byte(value, ebus::Endian::Little);
+      break;
+    case ebus::DataType::UINT16R:
+      result = ebus::uint16_2_byte(value, ebus::Endian::Big);
+      break;
+    case ebus::DataType::INT16:
+      result = ebus::int16_2_byte(value, ebus::Endian::Little);
+      break;
+    case ebus::DataType::INT16R:
+      result = ebus::int16_2_byte(value, ebus::Endian::Big);
+      break;
     case ebus::DataType::DATA2B:
-      result = ebus::data2b_2_byte(value);
+      result = ebus::data2b_2_byte(value, ebus::Endian::Little);
+      break;
+    case ebus::DataType::DATA2BR:
+      result = ebus::data2b_2_byte(value, ebus::Endian::Big);
       break;
     case ebus::DataType::DATA2C:
-      result = ebus::data2c_2_byte(value);
+      result = ebus::data2c_2_byte(value, ebus::Endian::Little);
+      break;
+    case ebus::DataType::DATA2CR:
+      result = ebus::data2c_2_byte(value, ebus::Endian::Big);
+      break;
+    case ebus::DataType::UINT32:
+      result = ebus::uint32_2_byte(value, ebus::Endian::Little);
+      break;
+    case ebus::DataType::UINT32R:
+      result = ebus::uint32_2_byte(value, ebus::Endian::Big);
+      break;
+    case ebus::DataType::INT32:
+      result = ebus::int32_2_byte(value, ebus::Endian::Little);
+      break;
+    case ebus::DataType::INT32R:
+      result = ebus::int32_2_byte(value, ebus::Endian::Big);
       break;
     case ebus::DataType::FLOAT:
-      result = ebus::float_2_byte(value);
+      result = ebus::float_2_byte(value, ebus::Endian::Little);
+      break;
+    case ebus::DataType::FLOATR:
+      result = ebus::float_2_byte(value, ebus::Endian::Big);
       break;
     default:
       break;

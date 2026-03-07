@@ -4,6 +4,8 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 
+#include <algorithm>
+
 #include "DeviceManager.hpp"
 #include "Logger.hpp"
 #include "Mqtt.hpp"
@@ -28,7 +30,9 @@ portMUX_TYPE commandMux = portMUX_INITIALIZER_UNLOCKED;
 
 Schedule schedule;
 
-void Schedule::start(ebus::Request* request, ebus::Handler* handler) {
+void Schedule::start(ebus::Bus* bus, ebus::Request* request,
+                     ebus::Handler* handler) {
+  ebusBus = bus;
   ebusRequest = request;
   ebusHandler = handler;
 
@@ -145,6 +149,7 @@ void Schedule::resetCounter() {
   busRequestFailed = 0;
   sendingFailed = 0;
 
+  if (ebusBus) ebusBus->resetCounter();
   if (ebusRequest) ebusRequest->resetCounter();
   if (ebusHandler) ebusHandler->resetCounter();
 }
@@ -174,8 +179,9 @@ const std::string Schedule::getCounterJson() {
   Failed["Sending"] = sendingFailed;
 
   // Counter
-  ebus::Handler::Counter handlerCounter = ebusHandler->getCounter();
+  ebus::Bus::Counter busCounter = ebusBus->getCounter();
   ebus::Request::Counter requestCounter = ebusRequest->getCounter();
+  ebus::Handler::Counter handlerCounter = ebusHandler->getCounter();
 
   // Messages
   JsonObject Messages = doc["Messages"].to<JsonObject>();
@@ -192,9 +198,12 @@ const std::string Schedule::getCounterJson() {
   Messages["Active_Master_Master"] = handlerCounter.messagesActiveMasterMaster;
   Messages["Active_Broadcast"] = handlerCounter.messagesActiveBroadcast;
 
+  // Bus
+  JsonObject Bus = doc["Bus"].to<JsonObject>();
+  Bus["StartBit"] = busCounter.busStartBit;
+
   // Requests
   JsonObject Requests = doc["Requests"].to<JsonObject>();
-  Requests["StartBit"] = requestCounter.requestsStartBit;
   Requests["FirstSyn"] = requestCounter.requestsFirstSyn;
   Requests["FirstWon"] = requestCounter.requestsFirstWon;
   Requests["FirstRetry"] = requestCounter.requestsFirstRetry;
@@ -255,7 +264,7 @@ void Schedule::setPublishTiming(bool enable) { timingEnabled = enable; }
 const bool Schedule::getPublishTiming() const { return timingEnabled; }
 
 void Schedule::resetTiming() {
-  if (ebusRequest) ebusRequest->resetTiming();
+  if (ebusBus) ebusBus->resetTiming();
   if (ebusHandler) ebusHandler->resetTiming();
 }
 
@@ -271,7 +280,7 @@ const std::string Schedule::getTimingJson() {
   JsonDocument doc;
 
   // Timing
-  ebus::Request::Timing requestTiming = ebusRequest->getTiming();
+  ebus::Bus::Timing busTiming = ebusBus->getTiming();
   ebus::Handler::Timing handlerTiming = ebusHandler->getTiming();
 
   // Helper lambda to add timing stats to a JsonObject
@@ -283,13 +292,13 @@ const std::string Schedule::getTimingJson() {
     obj["Count"] = count;
   };
 
-  addTiming(doc["BusIsr"]["Delay"].to<JsonObject>(),
-            requestTiming.busIsrDelayLast, requestTiming.busIsrDelayMean,
-            requestTiming.busIsrDelayStdDev, requestTiming.busIsrDelayCount);
+  addTiming(doc["BusIsr"]["Delay"].to<JsonObject>(), busTiming.busIsrDelayLast,
+            busTiming.busIsrDelayMean, busTiming.busIsrDelayStdDev,
+            busTiming.busIsrDelayCount);
 
   addTiming(doc["BusIsr"]["Window"].to<JsonObject>(),
-            requestTiming.busIsrWindowLast, requestTiming.busIsrWindowMean,
-            requestTiming.busIsrWindowStdDev, requestTiming.busIsrWindowCount);
+            busTiming.busIsrWindowLast, busTiming.busIsrWindowMean,
+            busTiming.busIsrWindowStdDev, busTiming.busIsrWindowCount);
 
   addTiming(doc["Write"].to<JsonObject>(), handlerTiming.writeLast,
             handlerTiming.writeMean, handlerTiming.writeStdDev,
