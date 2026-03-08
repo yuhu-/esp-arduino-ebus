@@ -18,14 +18,14 @@ void ClientManager::setLastCommsCallback(LastCommsCallback callback) {
   lastCommsCallback = std::move(callback);
 }
 
-void ClientManager::start(ebus::Bus* bus, ebus::ByteHandler* byteHandler,
+void ClientManager::start(ebus::Bus* bus, ebus::BusHandler* busHandler,
                           ebus::Request* request) {
   readonlyServer.begin();
   regularServer.begin();
   enhancedServer.begin();
 
   this->bus = bus;
-  this->byteHandler = byteHandler;
+  this->busHandler = busHandler;
   this->request = request;
 
   clientByteQueue = new ebus::Queue<uint8_t>();
@@ -33,7 +33,7 @@ void ClientManager::start(ebus::Bus* bus, ebus::ByteHandler* byteHandler,
   this->request->setExternalBusRequestedCallback(
       [this]() { busRequested = true; });
 
-  this->byteHandler->addByteListener(
+  this->busHandler->addByteListener(
       [this](const uint8_t& byte) { clientByteQueue->try_push(byte); });
 
   // Start the clientManagerRunner task

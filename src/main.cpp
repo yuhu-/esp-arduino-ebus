@@ -738,7 +738,7 @@ void setup() {
                  ebusController.getHandler());
 
   clientManager.setLastCommsCallback(updateLastComms);
-  clientManager.start(ebusController.getBus(), ebusController.getByteHandler(),
+  clientManager.start(ebusController.getBus(), ebusController.getBusHandler(),
                       ebusController.getRequest());
 
   store.setDataUpdatedCallback(Mqtt::publishValue);

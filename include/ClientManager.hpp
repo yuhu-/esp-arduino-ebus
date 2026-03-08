@@ -18,7 +18,7 @@ class ClientManager {
 
   void setLastCommsCallback(LastCommsCallback callback);
 
-  void start(ebus::Bus* bus, ebus::ByteHandler* byteHandler,
+  void start(ebus::Bus* bus, ebus::BusHandler* busHandler,
              ebus::Request* request);
 
   void stop();
@@ -33,7 +33,7 @@ class ClientManager {
   volatile bool busRequested = false;
 
   ebus::Bus* bus = nullptr;
-  ebus::ByteHandler* byteHandler = nullptr;
+  ebus::BusHandler* busHandler = nullptr;
   ebus::Request* request = nullptr;
 
   LastCommsCallback lastCommsCallback = nullptr;
