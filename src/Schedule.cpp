@@ -292,13 +292,13 @@ const std::string Schedule::getTimingJson() {
     obj["Count"] = count;
   };
 
-  addTiming(doc["BusIsr"]["Delay"].to<JsonObject>(), busTiming.busIsrDelayLast,
-            busTiming.busIsrDelayMean, busTiming.busIsrDelayStdDev,
-            busTiming.busIsrDelayCount);
+  addTiming(doc["Bus"]["Delay"].to<JsonObject>(), busTiming.busDelayLast,
+            busTiming.busDelayMean, busTiming.busDelayStdDev,
+            busTiming.busDelayCount);
 
-  addTiming(doc["BusIsr"]["Window"].to<JsonObject>(),
-            busTiming.busIsrWindowLast, busTiming.busIsrWindowMean,
-            busTiming.busIsrWindowStdDev, busTiming.busIsrWindowCount);
+  addTiming(doc["Bus"]["Window"].to<JsonObject>(), busTiming.busWindowLast,
+            busTiming.busWindowMean, busTiming.busWindowStdDev,
+            busTiming.busWindowCount);
 
   addTiming(doc["Write"].to<JsonObject>(), handlerTiming.writeLast,
             handlerTiming.writeMean, handlerTiming.writeStdDev,
