@@ -292,62 +292,64 @@ const std::string Schedule::getTimingJson() {
     obj["Count"] = count;
   };
 
-  addTiming(doc["Bus"]["Delay"].to<JsonObject>(), busTiming.busDelayLast,
-            busTiming.busDelayMean, busTiming.busDelayStdDev,
-            busTiming.busDelayCount);
+  addTiming(doc["Bus"]["Delay"].to<JsonObject>(), busTiming.busDelay_Last,
+            busTiming.busDelay_Mean, busTiming.busDelay_StdDev,
+            busTiming.busDelay_Count);
 
-  addTiming(doc["Bus"]["Window"].to<JsonObject>(), busTiming.busWindowLast,
-            busTiming.busWindowMean, busTiming.busWindowStdDev,
-            busTiming.busWindowCount);
+  addTiming(doc["Bus"]["Window"].to<JsonObject>(), busTiming.busWindow_Last,
+            busTiming.busWindow_Mean, busTiming.busWindow_StdDev,
+            busTiming.busWindow_Count);
 
-  addTiming(doc["Write"].to<JsonObject>(), handlerTiming.writeLast,
-            handlerTiming.writeMean, handlerTiming.writeStdDev,
-            handlerTiming.writeCount);
+  addTiming(doc["Write"].to<JsonObject>(), handlerTiming.write_Last,
+            handlerTiming.write_Mean, handlerTiming.write_StdDev,
+            handlerTiming.write_Count);
 
   addTiming(doc["Active"]["First"].to<JsonObject>(),
-            handlerTiming.activeFirstLast, handlerTiming.activeFirstMean,
-            handlerTiming.activeFirstStdDev, handlerTiming.activeFirstCount);
+            handlerTiming.activeFirst_Last, handlerTiming.activeFirst_Mean,
+            handlerTiming.activeFirst_StdDev, handlerTiming.activeFirst_Count);
 
   addTiming(doc["Active"]["Data"].to<JsonObject>(),
-            handlerTiming.activeDataLast, handlerTiming.activeDataMean,
-            handlerTiming.activeDataStdDev, handlerTiming.activeDataCount);
+            handlerTiming.activeData_Last, handlerTiming.activeData_Mean,
+            handlerTiming.activeData_StdDev, handlerTiming.activeData_Count);
 
   addTiming(doc["Passive"]["First"].to<JsonObject>(),
-            handlerTiming.passiveFirstLast, handlerTiming.passiveFirstMean,
-            handlerTiming.passiveFirstStdDev, handlerTiming.passiveFirstCount);
+            handlerTiming.passiveFirst_Last, handlerTiming.passiveFirst_Mean,
+            handlerTiming.passiveFirst_StdDev,
+            handlerTiming.passiveFirst_Count);
 
   addTiming(doc["Passive"]["Data"].to<JsonObject>(),
-            handlerTiming.passiveDataLast, handlerTiming.passiveDataMean,
-            handlerTiming.passiveDataStdDev, handlerTiming.passiveDataCount);
+            handlerTiming.passiveData_Last, handlerTiming.passiveData_Mean,
+            handlerTiming.passiveData_StdDev, handlerTiming.passiveData_Count);
 
-  addTiming(doc["Sync"].to<JsonObject>(), handlerTiming.syncLast,
-            handlerTiming.syncMean, handlerTiming.syncStdDev,
-            handlerTiming.syncCount);
+  addTiming(doc["Sync"].to<JsonObject>(), handlerTiming.sync_Last,
+            handlerTiming.sync_Mean, handlerTiming.sync_StdDev,
+            handlerTiming.sync_Count);
 
   addTiming(doc["Callback"]["Won"].to<JsonObject>(),
-            handlerTiming.callbackWonLast, handlerTiming.callbackWonMean,
-            handlerTiming.callbackWonStdDev, handlerTiming.callbackWonCount);
+            handlerTiming.callbackWon_Last, handlerTiming.callbackWon_Mean,
+            handlerTiming.callbackWon_StdDev, handlerTiming.callbackWon_Count);
 
   addTiming(doc["Callback"]["Lost"].to<JsonObject>(),
-            handlerTiming.callbackLostLast, handlerTiming.callbackLostMean,
-            handlerTiming.callbackLostStdDev, handlerTiming.callbackLostCount);
+            handlerTiming.callbackLost_Last, handlerTiming.callbackLost_Mean,
+            handlerTiming.callbackLost_StdDev,
+            handlerTiming.callbackLost_Count);
 
   addTiming(doc["Callback"]["Reactive"].to<JsonObject>(),
-            handlerTiming.callbackReactiveLast,
-            handlerTiming.callbackReactiveMean,
-            handlerTiming.callbackReactiveStdDev,
-            handlerTiming.callbackReactiveCount);
+            handlerTiming.callbackReactive_Last,
+            handlerTiming.callbackReactive_Mean,
+            handlerTiming.callbackReactive_StdDev,
+            handlerTiming.callbackReactive_Count);
 
   addTiming(doc["Callback"]["Telegram"].to<JsonObject>(),
-            handlerTiming.callbackTelegramLast,
-            handlerTiming.callbackTelegramMean,
-            handlerTiming.callbackTelegramStdDev,
-            handlerTiming.callbackTelegramCount);
+            handlerTiming.callbackTelegram_Last,
+            handlerTiming.callbackTelegram_Mean,
+            handlerTiming.callbackTelegram_StdDev,
+            handlerTiming.callbackTelegram_Count);
 
   addTiming(doc["Callback"]["Error"].to<JsonObject>(),
-            handlerTiming.callbackErrorLast, handlerTiming.callbackErrorMean,
-            handlerTiming.callbackErrorStdDev,
-            handlerTiming.callbackErrorCount);
+            handlerTiming.callbackError_Last, handlerTiming.callbackError_Mean,
+            handlerTiming.callbackError_StdDev,
+            handlerTiming.callbackError_Count);
 
   ebus::Handler::StateTiming stateTiming = ebusHandler->getStateTiming();
 
