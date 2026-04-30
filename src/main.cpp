@@ -22,7 +22,7 @@
 #if defined(EBUS_INTERNAL)
 #include <ebus.hpp>
 
-// #include "ClientManager.hpp"
+#include "ClientManager.hpp"
 #include "Cron.hpp"
 #include "Mqtt.hpp"
 #include "MqttHA.hpp"
@@ -606,9 +606,7 @@ extern "C" void app_main(void) {
   // schedule.start(ebusController.getBus(), ebusController.getRequest(),
   //                ebusController.getHandler());
 
-  // clientManager.start(ebusController.getBus(),
-  // ebusController.getBusHandler(),
-  //                     ebusController.getRequest());
+  clientManager.start(&ebusController);
 
   store.setDataUpdatedCallback(Mqtt::publishValue);
   store.setDataUpdatedLogCallback(

@@ -1,48 +1,27 @@
 #if defined(EBUS_INTERNAL)
-/*
 #include "ClientManager.hpp"
 
+#include <fcntl.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
-
-#include <cerrno>
-#include <fcntl.h>
 #include <lwip/sockets.h>
 #include <lwip/tcp.h>
 
 #include <algorithm>
+#include <cerrno>
 
 #include "Logger.hpp"
-
-// C++11 compatible make_unique
-template <class T, class... Args>
-std::unique_ptr<T> make_unique(Args&&... args) {
-  return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
-}
 
 ClientManager clientManager;
 
 ClientManager::ClientManager() = default;
 
-void ClientManager::start(ebus::Bus* bus, ebus::BusHandler* busHandler,
-                          ebus::Request* request) {
+void ClientManager::start(ebus::Controller* controller) {
   createListenSocket(readonlyServer);
   createListenSocket(regularServer);
   createListenSocket(enhancedServer);
 
-  this->bus = bus;
-  this->busHandler = busHandler;
-  this->request = request;
-
-  clientByteQueue = new ebus::Queue<uint8_t>();
-
-  request->setExternalBusRequestedCallback([this]() {
-    busRequestSuccess = true;
-    logger.info("Bus request success");
-  });
-
-  busHandler->addByteListener(
-      [this](const uint8_t& byte) { clientByteQueue->try_push(byte); });
+  this->controller = controller;
 
   // Start the clientManagerRunner task
   xTaskCreate(&ClientManager::taskFunc, "clientManagerRunner", 4096, this, 3,
@@ -102,8 +81,7 @@ int ClientManager::acceptClient(ServerSocket& server) {
 
   if (setsockopt(clientFd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag)) < 0) {
     logger.warn("Failed to set TCP_NODELAY on client socket (fd=" +
-std::to_string(clientFd) +
-                "): " + std::to_string(errno));
+                std::to_string(clientFd) + "): " + std::to_string(errno));
   }
 
   return clientFd;
@@ -111,150 +89,55 @@ std::to_string(clientFd) +
 
 void ClientManager::taskFunc(void* arg) {
   ClientManager* self = static_cast<ClientManager*>(arg);
-  AbstractClient* activeClient = nullptr;
-  BusState busState = BusState::Idle;
-  uint8_t receiveByte = 0;
 
   for (;;) {
-    if (self->stopRunner) vTaskDelete(NULL);
+    if (self->stopRunner) {
+      self->clientManagerTaskHandle = nullptr;
+      vTaskDelete(NULL);
+    }
 
     // Check for new clients
     self->acceptClients();
 
-    // Clean up disconnected active client
-    if (activeClient && !activeClient->isConnected()) {
-      logger.info("Client disconnected (was active)");
-      activeClient->stop();
-      activeClient = nullptr;
-      busState = BusState::Idle;
-      self->busRequestSuccess = false;
-      self->request->reset();
-    }
-
-    // Select new active client if idle
-    if (!activeClient && busState == BusState::Idle) {
-      for (size_t i = 0; i < self->clients.size(); ++i) {
-        AbstractClient* client = self->clients[i].get();
-        if (client->isConnected() && client->isWriteCapable() &&
-            client->available()) {
-          activeClient = client;
-          busState = BusState::Request;
-          self->busRequestSuccess = false;
-          logger.info("Client has data to send (client #" + std::to_string(i) +
-")"); break;
-        }
+    // Periodically clean up closed FDs from our tracking list if necessary.
+    // Note: The library typically handles the I/O errors and stops using the
+    // FD, but we can remove them from our internal list by checking socket
+    // status.
+    auto it = self->clients.begin();
+    while (it != self->clients.end()) {
+      char buffer = 0;
+      int res = recv(it->fd, &buffer, 1, MSG_PEEK | MSG_DONTWAIT);
+      if (res == 0 || (res < 0 && errno != EWOULDBLOCK && errno != EAGAIN)) {
+        logger.info("TCP Client FD " + std::to_string(it->fd) + " closed.");
+        self->controller->removeClient(it->fd);
+        close(it->fd);
+        it = self->clients.erase(it);
+      } else {
+        ++it;
       }
     }
 
-    // Request bus access
-    if (activeClient && busState == BusState::Request) {
-      if ((self->clientByteQueue->size() == 0)) {
-        int attempt = 0;
-        for (attempt = 0; attempt < 50; ++attempt) {
-          if (self->request->busAvailable()) {
-            break;
-          }
-          vTaskDelay(1);
-        }
-
-        if (attempt >= 50) {
-            logger.warn("Bus available timeout for client");
-            continue;
-        }
-
-        uint8_t firstByte = 0;
-        if (activeClient->readByte(firstByte)) {
-          self->request->requestBus(firstByte, true);
-          logger.info("Bus requested by client");
-          busState = BusState::Response;
-        } else {
-          // Client initialized or error
-          activeClient = nullptr;
-          busState = BusState::Idle;
-          self->busRequestSuccess = false;
-          self->request->reset();
-        }
-      }
-    }
-
-    // Transmit to bus if needed
-    if (activeClient && busState == BusState::Transmit) {
-      uint8_t sendByte = 0;
-      if (activeClient->readByte(sendByte)) {
-        self->bus->writeByte(sendByte);
-        busState = BusState::Response;
-      }
-    }
-
-    // Process received bytes from bus
-    while (self->clientByteQueue->try_pop(receiveByte)) {
-      if (activeClient) {
-        if ((busState == BusState::Response ||
-             busState == BusState::Transmit) &&
-            self->busRequestSuccess) {
-          if (activeClient->handleBusData(receiveByte)) {
-            // Continue transmitting if needed
-            busState = BusState::Transmit;
-          } else {
-            // Transaction done or error
-            activeClient = nullptr;
-            busState = BusState::Idle;
-            self->busRequestSuccess = false;
-            self->request->reset();
-          }
-        }
-      }
-
-      // Forward to all other clients
-      for (size_t i = 0; i < self->clients.size(); ++i) {
-        AbstractClient* client = self->clients[i].get();
-        if (client != activeClient && client->isConnected()) {
-          client->writeBytes({receiveByte});
-        }
-      }
-    }
-
-    vTaskDelay(1);
+    vTaskDelay(pdMS_TO_TICKS(100));
   }
 }
 
 void ClientManager::acceptClients() {
-  // Accept read-only clients
-  for (;;) {
-    const int clientFd = acceptClient(readonlyServer);
-    if (clientFd < 0) break;
-    clients.push_back(make_unique<ReadOnlyClient>(clientFd, request));
-    logger.info("ReadOnly client connected");
-  }
+  auto registerNew = [this](ServerSocket& server, ebus::ClientType type,
+                            const char* label) {
+    for (;;) {
+      const int clientFd = acceptClient(server);
+      if (clientFd < 0) break;
 
-  // Accept regular clients
-  for (;;) {
-    const int clientFd = acceptClient(regularServer);
-    if (clientFd < 0) break;
-    clients.push_back(make_unique<RegularClient>(clientFd, request));
-    logger.info("Regular client connected");
-  }
+      logger.info(std::string(label) +
+                  " client connected (FD=" + std::to_string(clientFd) + ")");
+      controller->addClient(clientFd, type);
+      clients.push_back({clientFd});
+    }
+  };
 
-  // Accept enhanced clients
-  for (;;) {
-    const int clientFd = acceptClient(enhancedServer);
-    if (clientFd < 0) break;
-    clients.push_back(make_unique<EnhancedClient>(clientFd, request));
-    logger.info("Enhanced client connected");
-  }
-
-  // Clean up disconnected clients
-  clients.erase(
-      std::remove_if(clients.begin(), clients.end(),
-                     [](const std::unique_ptr<AbstractClient>& client) {
-                       if (!client->isConnected()) {
-                         logger.info("Client disconnected");
-                         client->stop();  // <-- ensure socket is closed
-                         return true;
-                       }
-                       return false;
-                     }),
-      clients.end());
+  registerNew(readonlyServer, ebus::ClientType::read_only, "ReadOnly");
+  registerNew(regularServer, ebus::ClientType::regular, "Regular");
+  registerNew(enhancedServer, ebus::ClientType::enhanced, "Enhanced");
 }
-*/
+
 #endif

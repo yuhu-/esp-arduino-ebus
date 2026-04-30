@@ -1,13 +1,13 @@
 #pragma once
 
 #if defined(EBUS_INTERNAL)
-/*
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 #include <cstdint>
-
+#include <ebus/controller.hpp>
+#include <memory>
 #include <vector>
-
- #include "ClientType.hpp"
 
 // ClientManager handles all connected clients and routes data between them and
 // the eBus It supports ReadOnly, Regular, and Enhanced clients.
@@ -16,32 +16,26 @@ class ClientManager {
  public:
   ClientManager();
 
-  void start(ebus::Bus* bus, ebus::BusHandler* busHandler,
-             ebus::Request* request);
-
+  void start(ebus::Controller* controller);
   void stop();
 
  private:
-    struct ServerSocket {
-      uint16_t port;
-      int listenFd = -1;
-    };
+  struct ServerSocket {
+    uint16_t port;
+    int listenFd = -1;
+  };
 
-    ServerSocket readonlyServer{3334};
-    ServerSocket regularServer{3333};
-    ServerSocket enhancedServer{3335};
+  ServerSocket readonlyServer{3334};
+  ServerSocket regularServer{3333};
+  ServerSocket enhancedServer{3335};
 
-  ebus::Queue<uint8_t>* clientByteQueue = nullptr;
   volatile bool stopRunner = false;
-  volatile bool busRequestSuccess = false;
+  ebus::Controller* controller = nullptr;
 
-  ebus::Bus* bus = nullptr;
-  ebus::BusHandler* busHandler = nullptr;
-  ebus::Request* request = nullptr;
-
-  std::vector<std::unique_ptr<AbstractClient>> clients;
-
-  enum class BusState { Idle, Request, Transmit, Response };
+  struct ConnectedClient {
+    int fd;
+  };
+  std::vector<ConnectedClient> clients;
 
   TaskHandle_t clientManagerTaskHandle;
 
@@ -53,5 +47,4 @@ class ClientManager {
 };
 
 extern ClientManager clientManager;
-*/
 #endif
