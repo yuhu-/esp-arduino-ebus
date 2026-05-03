@@ -20,13 +20,13 @@
 #include "Logger.hpp"
 
 #if defined(EBUS_INTERNAL)
-#include <ebus.hpp>
 
-#include "ClientManager.hpp"
 #include "Cron.hpp"
 #include "Mqtt.hpp"
 #include "MqttHA.hpp"
 #include "Store.hpp"
+#include "client_acceptor.hpp"
+#include "ebus_accessor.hpp"
 #else
 #include "BusType.hpp"
 #include "client.hpp"
@@ -44,8 +44,7 @@
 #include "http.hpp"
 
 #if defined(EBUS_INTERNAL)
-ebus::EbusConfig ebusConfig;
-ebus::Controller ebusController;
+
 #endif
 
 ConfigManager configManager;
@@ -133,7 +132,7 @@ void prepareRuntimeForUpgrade() {
   // schedule.stop();
   // clientManager.stop();
   mqtt.stopTask();
-  ebusController.stop();
+  stopEbus();
 
   vTaskDelay(pdMS_TO_TICKS(50));
 #else
@@ -264,10 +263,10 @@ void saveParamsCallback() {
 
 #if defined(EBUS_INTERNAL)
   std::string ebusAddress = configManager.readString("ebusAddress", "ff");
-  ebusController.setAddress(
+  getEbusController().setAddress(
       uint8_t(std::strtoul(ebusAddress.c_str(), nullptr, 16)));
-  ebusController.setWindow(configManager.readInt("busisrWindow", 4300));
-  ebusController.setOffset(configManager.readInt("busisrOffset", 80));
+  getEbusController().setWindow(configManager.readInt("busisrWindow", 4300));
+  getEbusController().setOffset(configManager.readInt("busisrOffset", 80));
 
   if (configManager.readBool("sntpEnabled")) {
     esp_sntp_stop();
@@ -578,44 +577,144 @@ extern "C" void app_main(void) {
   enableTX();
 
 #if defined(EBUS_INTERNAL)
+  // TODO should we store EbusConfig as json in NVS ?
+
+  // BusConfig
   ebus::BusConfig busConfig = {.uart_port = UART_NUM_1,
                                .rx_pin = UART_RX,
                                .tx_pin = UART_TX,
                                .timer_group = 1,
                                .timer_idx = 0};
+  getEbusConfig().bus = busConfig;
 
-  ebusConfig.runtime.address = uint8_t(std::strtoul(
-      configManager.readString("ebusAddress", "ff").c_str(), nullptr, 16));
-  ebusConfig.runtime.bus.window_us =
-      configManager.readInt("busisrWindow", 4300);
-  ebusConfig.runtime.bus.offset_us = configManager.readInt("busisrOffset", 80);
-  ebusConfig.bus = busConfig;
+  // General
+  getEbusConfig().runtime.address = uint8_t(std::strtoul(
+      configManager.readString("ownAddress", "ff").c_str(), nullptr, 16));
+  getEbusConfig().runtime.lock_counter =
+      configManager.readInt("lockCounter", 3);
+  getEbusConfig().runtime.system_inquiry =
+      configManager.readBool("systemInquiry");
+  getEbusConfig().runtime.system_response =
+      configManager.readBool("systemResponse");
 
-  ebusController.configure(ebusConfig);
+  // Bus
+  getEbusConfig().runtime.bus.window_us =
+      configManager.readInt("windowUs", 4300);
+  getEbusConfig().runtime.bus.offset_us = configManager.readInt("offsetUs", 80);
+  getEbusConfig().runtime.bus.watchdog_timeout_ms =
+      configManager.readInt("watchdogTimeoutMs", 250);
 
-  ebusController.start();
+  // Bus - Syn Generator
+  // ebusConfig.runtime.bus.syn.enabled =
+  //     configManager.readBool("synEnabled", false);
+  // ebusConfig.runtime.bus.syn.base_ms = configManager.readInt("synBaseMs",
+  // 50); ebusConfig.runtime.bus.syn.tolerance_ms =
+  //     configManager.readInt("synToleranceMs", 5);
 
-  // deviceManager.setEbusHandler(ebusController.getHandler());
-  // deviceManager.setScanOnStartup(configManager.readBool("scanOnStartPrm"));
+  // Logging
+  getEbusConfig().runtime.diagnostics.level =
+      static_cast<ebus::LogLevel>(configManager.readInt("logLevel", 1));
+  getEbusConfig().runtime.diagnostics.log_size =
+      configManager.readInt("logSize", 10);
 
-  // schedule.setSendInquiryOfExistence(configManager.readBool("inquiryExistPrm"));
-  // schedule.setFirstCommandAfterStart(
-  //     configManager.readInt("firstCmdAfterSt", 10));
-  // schedule.setPublishCounter(configManager.readBool("mqttPublishCnt"));
-  // schedule.setPublishTiming(configManager.readBool("mqttPublishTmg"));
-  // schedule.start(ebusController.getBus(), ebusController.getRequest(),
-  //                ebusController.getHandler());
+  // Network
+  // ebusConfig.runtime.network.session_timeout_ms =
+  //     configManager.readInt("sessionTimeoutMs", 500);
+  // ebusConfig.runtime.network.transmit_timeout_ms =
+  //     configManager.readInt("transmitTimeoutMs", 250);
+  // ebusConfig.runtime.network.outbound_buffer_size =
+  //     configManager.readInt("outboundBufferSize", 4096);
 
-  clientManager.start(&ebusController);
+  // Scanner
+  // ebusConfig.runtime.scanner.scan_on_startup =
+  //     configManager.readBool("scanOnStart", false);
+  // ebusConfig.runtime.scanner.initial_delay_s =
+  //     configManager.readInt("initialDelayS", 5);
+  // ebusConfig.runtime.scanner.startup_interval_s =
+  //     configManager.readInt("startupIntervalS", 60);
+  // ebusConfig.runtime.scanner.max_startup_scans =
+  //     configManager.readInt("maxStartupScans", 5);
+
+  // Scheduler
+  // ebusConfig.runtime.scheduler.max_send_attempts =
+  //     configManager.readInt("maxSendAttempts", 3);
+  // ebusConfig.runtime.scheduler.base_backoff_ms =
+  //     configManager.readInt("baseBackoffMs", 100);
+  // ebusConfig.runtime.scheduler.fsm_timeout_ms =
+  //     configManager.readInt("fsmTimeoutMs", 1000);
+  // ebusConfig.runtime.scheduler.total_timeout_ms =
+  //     configManager.readInt("totalTimeoutMs", 2000);
+
+  configureEbus(getEbusConfig());
+
+  // Setup the TelegramCallback to bridge bus messages to the application store
+  // and UI
+  getEbusController().setTelegramCallback([](const ebus::TelegramInfo& info) {
+    // Update the store. Passing nullptr for the command tells the store
+    // to find all matching command definitions (both active and passive).
+    store.updateData(nullptr, info.master_view, info.slave_view);
+  });
+
+  // Setup the ErrorCallback to log errors and publish them to MQTT for UI
+  // feedback
+  getEbusController().setErrorCallback([](const ebus::ErrorInfo& info) {
+    // Log the error using the application's logger
+    std::string logMessage =
+        ebus::toJson(info);  // Use ebus::toJson for ErrorInfo
+    if (info.level == ebus::LogLevel::error) {
+      logger.error(logMessage);
+    } else {
+      logger.warn(logMessage);
+    }
+    // Publish the error to MQTT for UI consumption
+    mqtt.publishError(info);
+  });
+
+  startEbus();  // This will start the ebus controller
+
+  client_acceptor.start();
 
   store.setDataUpdatedCallback(Mqtt::publishValue);
   store.setDataUpdatedLogCallback(
       [](const std::string& message) { logger.debug(message); });
+
+  // Setup lifecycle listeners to keep ebusController in sync with the Store
+  store.setCommandChangedCallback([](Command* cmd) {
+    // Remove existing poll item if it was already registered
+    if (cmd->getPollId() != 0) {
+      getEbusController().removePollItem(cmd->getPollId());
+      cmd->setPollId(0);
+    }
+    // Add new poll item if active and has a valid read command
+    if (cmd->getActive() && !cmd->getReadCmd().empty()) {
+      std::string key = cmd->getKey();  // Capture key by value for the lambda
+      uint32_t id = getEbusController().addPollItem(
+          3, cmd->getReadCmd(), cmd->getInterval() * 1000,
+          [key](const ebus::ResultInfo& info) {
+            if (info.success) {
+              Command* target = store.findCommand(key);
+              if (target) {
+                store.updateData(target, info.master_view, info.slave_view);
+              }
+            }
+          });
+      cmd->setPollId(id);
+    }
+  });
+
+  store.setCommandRemovedCallback([](Command* cmd) {
+    if (cmd->getPollId() != 0) {
+      getEbusController().removePollItem(cmd->getPollId());
+      cmd->setPollId(0);
+    }
+  });
+
   if (!store.initFileSystem()) {
     logger.error("LittleFS initialization failed");
   }
-  store.loadCommands();  // install saved commands
-  cron.initFileSystem();
+  store.loadCommands();  // Automatically registers poll items via the callback
+
+  cron.initFileSystem();  // This should be called before cron.loadRules()
   cron.loadRules();
   cron.start();
   mqttha.publishComponents();

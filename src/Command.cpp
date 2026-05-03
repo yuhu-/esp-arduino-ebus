@@ -8,6 +8,10 @@
 #include <limits>
 #include <regex>
 
+const uint32_t& Command::getPollId() const { return poll_id; }
+
+void Command::setPollId(const uint32_t id) { poll_id = id; }
+
 const uint32_t& Command::getLast() const { return last; }
 
 void Command::setLast(const uint32_t time) { last = time; }
@@ -199,6 +203,7 @@ Command Command::fromJson(const cJSON* doc) {
   if (cJSON_IsNumber(intervalNode) && intervalNode->valuedouble >= 0)
     command.interval = static_cast<uint32_t>(intervalNode->valuedouble);
   command.last = 0;
+  command.poll_id = 0;
   command.data.clear();
 
   // Data Fields

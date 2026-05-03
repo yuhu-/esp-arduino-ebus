@@ -1,9 +1,9 @@
 #include "Logger.hpp"
 
-#include <sys/time.h>
-#include <cstring>
 #include <esp_timer.h>
+#include <sys/time.h>
 
+#include <cstring>
 
 namespace {
 constexpr size_t kPrintQueueLen = 32;
@@ -47,7 +47,7 @@ Logger::Logger(size_t maxEntries)
       mux(portMUX_INITIALIZER_UNLOCKED),
       printQueue(nullptr),
       printTask(nullptr) {
-  buffer = new LogEntry[maxEntries];
+  buffer_ = std::vector<LogEntry>(maxEntries);  // Initialize std::vector
   printQueue = xQueueCreate(kPrintQueueLen, kPrintMsgMaxLen);
   if (printQueue != nullptr) {
     xTaskCreate(Logger::printTaskEntry, "logger_print", 4096, this, 1,
@@ -64,7 +64,6 @@ Logger::~Logger() {
     vQueueDelete(printQueue);
     printQueue = nullptr;
   }
-  delete[] buffer;
 }
 
 void Logger::error(std::string message) { log(LogLevel::ERROR, message); }
@@ -81,8 +80,8 @@ const std::string Logger::getLogs(uint64_t sinceMillis) const {
   bool first = true;
   portENTER_CRITICAL(&mux);
   for (size_t i = 0; i < entries; i++) {
-    size_t logIndex = (index - entries + i + maxEntries) % maxEntries;
-    const LogEntry& entry = buffer[logIndex];
+    const size_t logIndex = (index - entries + i + maxEntries) % maxEntries;
+    const LogEntry& entry = buffer_[logIndex];
     if (entry.timestamp < sinceMillis) continue;
 
     if (!first) response += ",";
@@ -141,7 +140,8 @@ bool Logger::currentMillisTimeRelation(uint64_t& currentMillis,
 }
 
 void Logger::log(LogLevel level, std::string message) {
-  if (printQueue != nullptr) {
+  if (printQueue != nullptr &&
+      printTask != nullptr) {  // Ensure task is running before sending to queue
     char msg[kPrintMsgMaxLen]{};
     std::strncpy(msg, message.c_str(), sizeof(msg) - 1);
     msg[sizeof(msg) - 1] = '\0';
@@ -149,9 +149,10 @@ void Logger::log(LogLevel level, std::string message) {
   }
 
   portENTER_CRITICAL(&mux);
-  buffer[index].timestamp = static_cast<uint64_t>(esp_timer_get_time() / 1000ULL);
-  buffer[index].level = level;
-  buffer[index].message = std::move(message);
+  buffer_[index].timestamp =
+      static_cast<uint64_t>(esp_timer_get_time() / 1000ULL);
+  buffer_[index].level = level;
+  buffer_[index].message = std::move(message);
   index = (index + 1) % maxEntries;
   if (entries < maxEntries) entries++;
   portEXIT_CRITICAL(&mux);

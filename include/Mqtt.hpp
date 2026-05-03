@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "Command.hpp"
+#include "ebus_accessor.hpp"
 
 enum class IncomingActionType { Insert, Remove };
 
@@ -35,25 +36,25 @@ struct OutgoingAction {
   OutgoingActionType type;
   const Command* command;  // for Command and Component
   // const Device* device;    // for Device
-  bool haRemove;  // for Component
+  bool ha_remove;  // for Component
 
   explicit OutgoingAction(const Command* cmd)
       : type(OutgoingActionType::Command),
         command(cmd),
         // device(nullptr),
-        haRemove(false) {}
+        ha_remove(false) {}
 
   // explicit OutgoingAction(const Device* part)
   //     : type(OutgoingActionType::Device),
   //       command(nullptr),
   //       device(part),
-  //       haRemove(false) {}
+  //       ha_remove(false) {}
 
   explicit OutgoingAction(const Command* cmd, bool remove)
       : type(OutgoingActionType::Component),
         command(cmd),
         // device(nullptr),
-        haRemove(remove) {}
+        ha_remove(remove) {}
 };
 
 using CommandHandler = std::function<void(const cJSON*)>;
@@ -94,43 +95,45 @@ class Mqtt {
                           const std::vector<uint8_t>& master,
                           const std::vector<uint8_t>& slave);
 
+  static void publishError(const ebus::ErrorInfo& info);
+
   static void publishValue(const std::string& name,
                            const std::string& valueJson);
 
   void doLoop();
 
  private:
-  esp_mqtt_client_handle_t client = nullptr;
-  esp_mqtt_client_config_t mqtt_cfg = {};
+  esp_mqtt_client_handle_t client_ = nullptr;
+  esp_mqtt_client_config_t mqtt_cfg_ = {};
 
-  std::string uniqueId;
-  std::string clientId;
-  std::string rootTopic;
-  std::string willTopic;
-  std::string requestTopic;
+  std::string unique_id_;
+  std::string client_id_;
+  std::string root_topic_;
+  std::string will_topic_;
+  std::string request_topic_;
 
-  std::string uri;
+  std::string uri_;
 
-  bool enabled = false;
-  bool connected = false;
+  bool enabled_ = false;
+  bool connected_ = false;
 
-  std::queue<IncomingAction> incomingQueue;
-  uint32_t lastIncoming = 0;
-  uint32_t incomingInterval = 25;  // ms
+  std::queue<IncomingAction> incoming_queue_;
+  uint32_t last_incoming_ = 0;
+  uint32_t incoming_interval_ = 25;  // ms
 
-  std::queue<OutgoingAction> outgoingQueue;
-  uint32_t lastOutgoing = 0;
-  uint32_t outgoingInterval = 25;  // ms
+  std::queue<OutgoingAction> outgoing_queue_;
+  uint32_t last_outgoing_ = 0;
+  uint32_t outgoing_interval_ = 25;  // ms
 
-  TaskHandle_t taskHandle = nullptr;
-  uint32_t lastStatusPublish = 0;
-  uint32_t statusPublishIntervalMs = 10 * 1000;
-  std::function<std::string()> statusProvider;
+  TaskHandle_t task_handle_ = nullptr;
+  uint32_t last_status_publish_ = 0;
+  uint32_t status_publish_interval_ms_ = 10 * 1000;
+  std::function<std::string()> status_provider_;
 
   static void taskFunc(void* arg);
 
   // Command handlers map
-  std::unordered_map<std::string, CommandHandler> commandHandlers = {
+  std::unordered_map<std::string, CommandHandler> command_handlers_ = {
       {"restart", [this](const cJSON* doc) { handleRestart(doc); }},
       {"insert", [this](const cJSON* doc) { handleInsert(doc); }},
       {"remove", [this](const cJSON* doc) { handleRemove(doc); }},

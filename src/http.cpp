@@ -19,6 +19,7 @@
 #include "MqttHA.hpp"
 #include "Store.hpp"
 #include "WifiNetworkManager.hpp"
+#include "ebus_accessor.hpp"
 #include "main.hpp"
 
 static httpd_handle_t configServer = nullptr;
@@ -539,35 +540,35 @@ esp_err_t handleValues(httpd_req_t* req) {
 
 esp_err_t handleValuesWrite(httpd_req_t* req) {
   cJSON* doc = cJSON_Parse(HttpUtils::readBody(req).c_str());
-  // if (!cJSON_IsObject(doc)) {
-  //   HttpUtils::sendResponse(req, "403 Forbidden", "text/html", "Json
-  //   invalid");
-  // } else {
-  //   cJSON* keyNode = cJSON_GetObjectItemCaseSensitive(doc, "key");
-  //   std::string key =
-  //       (cJSON_IsString(keyNode) && keyNode->valuestring != nullptr)
-  //           ? keyNode->valuestring
-  //           : "";
-  //   Command* command = store.findCommand(key);
-  //   if (command != nullptr) {
-  //     std::vector<uint8_t> valueBytes = command->getVectorFromJson(doc);
-  //     if (!valueBytes.empty()) {
-  //       std::vector<uint8_t> writeCmd = command->getWriteCmd();
-  //       writeCmd.insert(writeCmd.end(), valueBytes.begin(),
-  //       valueBytes.end()); schedule.handleWrite(writeCmd);
-  //       HttpUtils::sendResponse(req, "200 OK", "text/html", "Ok");
-  //     } else {
-  //       HttpUtils::sendResponse(
-  //           req, "403 Forbidden", "text/html",
-  //           std::string("Invalid value for key '") + key + "'");
-  //     }
-  //   } else {
-  //     HttpUtils::sendResponse(
-  //         req, "403 Forbidden", "text/html",
-  //         std::string("Key '") + key + "' not found");
-  //   }
-  // }
-  // if (doc) cJSON_Delete(doc);
+  if (!cJSON_IsObject(doc)) {
+    HttpUtils::sendResponse(req, "403 Forbidden", "text/html", "Json invalid");
+  } else {
+    cJSON* keyNode = cJSON_GetObjectItemCaseSensitive(doc, "key");
+    std::string key =
+        (cJSON_IsString(keyNode) && keyNode->valuestring != nullptr)
+            ? keyNode->valuestring
+            : "";
+    Command* command = store.findCommand(key);
+    if (command != nullptr) {
+      ebus::Sequence valueBytes = command->getVectorFromJson(doc);
+      if (!valueBytes.empty()) {
+        ebus::Sequence fullWrite = command->getWriteCmd();
+        fullWrite.append(valueBytes);
+
+        getEbusController().enqueue(PRIO_SEND, fullWrite);
+        HttpUtils::sendResponse(req, "200 OK", "text/html", "Ok");
+        command->setLast(0);  // Mark as stale to trigger immediate poll
+      } else {
+        HttpUtils::sendResponse(
+            req, "403 Forbidden", "text/html",
+            std::string("Invalid value for key '") + key + "'");
+      }
+    } else {
+      HttpUtils::sendResponse(req, "403 Forbidden", "text/html",
+                              std::string("Key '") + key + "' not found");
+    }
+  }
+  if (doc) cJSON_Delete(doc);
   return ESP_OK;
 }
 

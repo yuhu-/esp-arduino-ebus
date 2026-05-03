@@ -43,52 +43,52 @@ std::vector<std::string> getStringArray(cJSON* doc, const char* key) {
 }  // namespace
 
 void Mqtt::start() {
-  if (enabled) {
-    client = esp_mqtt_client_init(&mqtt_cfg);
-    esp_mqtt_client_register_event(client,
+  if (enabled_) {
+    client_ = esp_mqtt_client_init(&mqtt_cfg_);
+    esp_mqtt_client_register_event(client_,
                                    (esp_mqtt_event_id_t)ESP_EVENT_ANY_ID,
                                    &Mqtt::eventHandler, this);
-    esp_mqtt_client_start(client);
+    esp_mqtt_client_start(client_);
   }
 }
 
 void Mqtt::change() {
-  if (connected) esp_mqtt_client_stop(client);
+  if (connected_) esp_mqtt_client_stop(client_);
   start();
 }
 
 void Mqtt::startTask() {
-  if (taskHandle != nullptr) return;
-  xTaskCreate(&Mqtt::taskFunc, "mqtt_loop", 6144, this, 1, &taskHandle);
+  if (task_handle_ != nullptr) return;
+  xTaskCreate(&Mqtt::taskFunc, "mqtt_loop", 6144, this, 1, &task_handle_);
 }
 
 void Mqtt::stopTask() {
-  if (taskHandle != nullptr) {
-    vTaskDelete(taskHandle);
-    taskHandle = nullptr;
+  if (task_handle_ != nullptr) {
+    vTaskDelete(task_handle_);
+    task_handle_ = nullptr;
   }
 }
 
 void Mqtt::setStatusProvider(const std::function<std::string()>& provider) {
-  statusProvider = provider;
+  status_provider_ = provider;
 }
 
 void Mqtt::setup(const char* id) {
-  uniqueId = id;
-  clientId = "ebus-" + uniqueId;
-  rootTopic = "ebus/" + uniqueId + "/";
-  willTopic = mqtt.rootTopic + "available";
-  requestTopic = mqtt.rootTopic + "request";
+  unique_id_ = id;
+  client_id_ = "ebus-" + unique_id_;
+  root_topic_ = "ebus/" + unique_id_ + "/";
+  will_topic_ = root_topic_ + "available";
+  request_topic_ = root_topic_ + "request";
 
-  mqtt_cfg.credentials.client_id = clientId.c_str();
+  mqtt_cfg_.credentials.client_id = client_id_.c_str();
   // Last Will
-  mqtt_cfg.session.last_will.topic = willTopic.c_str();
-  mqtt_cfg.session.last_will.msg = "{ \"value\": \"offline\" }";
-  mqtt_cfg.session.last_will.msg_len = 0;
-  mqtt_cfg.session.last_will.qos = 1;
-  mqtt_cfg.session.last_will.retain = 1;
+  mqtt_cfg_.session.last_will.topic = will_topic_.c_str();
+  mqtt_cfg_.session.last_will.msg = "{ \"value\": \"offline\" }";
+  mqtt_cfg_.session.last_will.msg_len = 0;
+  mqtt_cfg_.session.last_will.qos = 1;
+  mqtt_cfg_.session.last_will.retain = 1;
   // Keep-alive interval in seconds
-  mqtt_cfg.session.keepalive = 60;
+  mqtt_cfg_.session.keepalive = 60;
 }
 
 void Mqtt::setServer(const char* host, uint16_t port) {
@@ -96,56 +96,56 @@ void Mqtt::setServer(const char* host, uint16_t port) {
   for (size_t i = 0; host[i] != '\0'; ++i)
     if (!std::isspace(host[i])) hostname += host[i];
 
-  uri = "mqtt://" + hostname;
-  if (port > 0) uri += ":" + std::to_string(port);
+  uri_ = "mqtt://" + hostname;
+  if (port > 0) uri_ += ":" + std::to_string(port);
 
-  mqtt_cfg.broker.address.uri = uri.c_str();
+  mqtt_cfg_.broker.address.uri = uri_.c_str();
 }
 
 void Mqtt::setCredentials(const char* username, const char* password) {
-  mqtt_cfg.credentials.username = username;
-  mqtt_cfg.credentials.authentication.password = password;
+  mqtt_cfg_.credentials.username = username;
+  mqtt_cfg_.credentials.authentication.password = password;
 }
 
 void Mqtt::setRootTopic(const std::string& topic) {
-  rootTopic = topic;
+  root_topic_ = topic;
   // Ensure proper formatting with trailing slash
-  if (!rootTopic.empty() && rootTopic.back() != '/') {
-    rootTopic += '/';
+  if (!root_topic_.empty() && root_topic_.back() != '/') {
+    root_topic_ += '/';
   }
-  willTopic = rootTopic + "available";
-  requestTopic = rootTopic + "request";
+  will_topic_ = root_topic_ + "available";
+  request_topic_ = root_topic_ + "request";
 }
 
-void Mqtt::setEnabled(const bool enable) { enabled = enable; }
+void Mqtt::setEnabled(const bool enable) { enabled_ = enable; }
 
-bool Mqtt::isEnabled() const { return enabled; }
+bool Mqtt::isEnabled() const { return enabled_; }
 
-bool Mqtt::isConnected() const { return connected; }
+bool Mqtt::isConnected() const { return connected_; }
 
-const std::string& Mqtt::getUniqueId() const { return uniqueId; }
+const std::string& Mqtt::getUniqueId() const { return unique_id_; }
 
-const std::string& Mqtt::getRootTopic() const { return rootTopic; }
+const std::string& Mqtt::getRootTopic() const { return root_topic_; }
 
-const std::string& Mqtt::getWillTopic() const { return willTopic; }
+const std::string& Mqtt::getWillTopic() const { return will_topic_; }
 
 void Mqtt::publish(const char* topic, uint8_t qos, bool retain,
                    const char* payload, bool prefix) {
-  if (!enabled) return;
+  if (!enabled_) return;
 
-  std::string mqttTopic = prefix ? rootTopic + topic : topic;
-  esp_mqtt_client_publish(client, mqttTopic.c_str(), payload, 0, qos, retain);
+  std::string mqttTopic = prefix ? root_topic_ + topic : topic;
+  esp_mqtt_client_publish(client_, mqttTopic.c_str(), payload, 0, qos, retain);
 }
 
 void Mqtt::enqueueOutgoing(const OutgoingAction& action) {
-  if (!mqtt.enabled) return;
-  mqtt.outgoingQueue.push(action);
+  if (!mqtt.enabled_) return;
+  mqtt.outgoing_queue_.push(action);
 }
 
 void Mqtt::publishData(const std::string& id,
                        const std::vector<uint8_t>& master,
                        const std::vector<uint8_t>& slave) {
-  if (!mqtt.enabled) return;
+  if (!mqtt.enabled_) return;
 
   cJSON* doc = cJSON_CreateObject();
   cJSON_AddStringToObject(doc, "id", id.c_str());
@@ -158,8 +158,16 @@ void Mqtt::publishData(const std::string& id,
   mqtt.publish("response", 0, false, payload.c_str());
 }
 
+void Mqtt::publishError(const ebus::ErrorInfo& info) {
+  if (!mqtt.enabled_) return;
+
+  // Convert ebus::ErrorInfo to JSON string using the library's utility
+  std::string payload = ebus::toJson(info);
+  mqtt.publish("errors", 0, false, payload.c_str());
+}
+
 void Mqtt::publishValue(const std::string& name, const std::string& valueJson) {
-  if (!mqtt.enabled) return;
+  if (!mqtt.enabled_) return;
 
   std::string subTopic = name;
   std::transform(subTopic.begin(), subTopic.end(), subTopic.begin(),
@@ -177,12 +185,13 @@ void Mqtt::doLoop() {
 void Mqtt::taskFunc(void* arg) {
   Mqtt* self = static_cast<Mqtt*>(arg);
   for (;;) {
-    if (self->enabled && self->connected) {
+    if (self->enabled_ && self->connected_) {
       uint32_t currentMillis = (uint32_t)(esp_timer_get_time() / 1000ULL);
-      if (currentMillis > self->lastStatusPublish + self->statusPublishIntervalMs) {
-        self->lastStatusPublish = currentMillis;
-        if (self->statusProvider) {
-          const std::string payload = self->statusProvider();
+      if (currentMillis >
+          self->last_status_publish_ + self->status_publish_interval_ms_) {
+        self->last_status_publish_ = currentMillis;
+        if (self->status_provider_) {
+          const std::string payload = self->status_provider_();
           self->publish("state", 0, false, payload.c_str());
         }
         // schedule.publishCounter();
@@ -204,20 +213,20 @@ void Mqtt::eventHandler(void* handler_args, esp_event_base_t base,
     } break;
     case MQTT_EVENT_CONNECTED: {
       logger.debug("MQTT connected");
-      self->connected = true;
-      esp_mqtt_client_subscribe(self->client, self->requestTopic.c_str(), 0);
+      self->connected_ = true;
+      esp_mqtt_client_subscribe(self->client_, self->request_topic_.c_str(), 0);
 
-      mqtt.publish(mqtt.willTopic.c_str(), 0, true, "{ \"value\": \"online\" }",
-                   false);
+      mqtt.publish(mqtt.will_topic_.c_str(), 0, true,
+                   "{ \"value\": \"online\" }", false);
 
       if (mqttha.isEnabled()) mqttha.publishDeviceInfo();
     } break;
     case MQTT_EVENT_DISCONNECTED: {
       logger.debug("MQTT disconnected");
-      self->connected = false;
+      self->connected_ = false;
     } break;
     case MQTT_EVENT_SUBSCRIBED: {
-      logger.debug(self->requestTopic + " subscribed");
+      logger.debug(self->request_topic_ + " subscribed");
     } break;
     case MQTT_EVENT_UNSUBSCRIBED:
     case MQTT_EVENT_PUBLISHED:
@@ -240,8 +249,8 @@ void Mqtt::eventHandler(void* handler_args, esp_event_base_t base,
               ? idNode->valuestring
               : "";
 
-      auto it = mqtt.commandHandlers.find(id);
-      if (it != mqtt.commandHandlers.end()) {
+      auto it = mqtt.command_handlers_.find(id);
+      if (it != mqtt.command_handlers_.end()) {
         it->second(doc);
       } else {
         // Unknown command error handling
@@ -274,7 +283,7 @@ void Mqtt::handleInsert(const cJSON* doc) {
   cJSON_ArrayForEach(command, commands) {
     std::string evalError = Command::evaluate(command);
     if (evalError.empty()) {
-      incomingQueue.push(IncomingAction(Command::fromJson(command)));
+      incoming_queue_.push(IncomingAction(Command::fromJson(command)));
     } else {
       mqtt.publish("response", 0, false, errorPayload(evalError).c_str());
     }
@@ -286,10 +295,11 @@ void Mqtt::handleRemove(const cJSON* doc) {
       getStringArray(const_cast<cJSON*>(doc), "keys");
 
   if (!keys.empty()) {
-    for (const std::string& key : keys) incomingQueue.push(IncomingAction(key));
+    for (const std::string& key : keys)
+      incoming_queue_.push(IncomingAction(key));
   } else {
     for (const Command* command : store.getCommands())
-      incomingQueue.push(IncomingAction(command->getKey()));
+      incoming_queue_.push(IncomingAction(command->getKey()));
   }
 }
 
@@ -341,14 +351,22 @@ void Mqtt::handleScan(const cJSON* doc) {
   std::vector<std::string> addresses =
       getStringArray(const_cast<cJSON*>(doc), "addresses");
 
-  // if (full)
-  //   schedule.handleScanFull();
-  // else if (vendor)
-  //   schedule.handleScanVendor();
-  // else if (addresses.empty())
-  //   schedule.handleScan();
-  // else
-  //   schedule.handleScanAddresses(addresses);
+  if (full) {
+    getEbusController().initFullScan(true);
+  } else if (vendor) {
+    // If your library has a vendor-specific scan method or uses specific
+    // addresses
+    getEbusController().scanObservedDevices();
+  } else if (addresses.empty()) {
+    getEbusController().scanObservedDevices();
+  } else {
+    std::vector<uint8_t> addrVec;
+    for (const auto& a : addresses) {
+      addrVec.push_back(
+          static_cast<uint8_t>(std::strtoul(a.c_str(), nullptr, 16)));
+    }
+    getEbusController().scanAddresses(addrVec);
+  }
 
   mqtt.publishResponse("scan", "initiated");
 }
@@ -359,12 +377,15 @@ void Mqtt::handleDevices(const cJSON* doc) {
 }
 
 void Mqtt::handleSend(const cJSON* doc) {
-  // std::vector<std::string> commands =
-  //     getStringArray(const_cast<cJSON*>(doc), "commands");
-  // if (commands.empty())
-  //   mqtt.publishResponse("send", "commands array invalid");
-  // else
-  //   schedule.handleSend(commands);
+  std::vector<std::string> commands =
+      getStringArray(const_cast<cJSON*>(doc), "commands");
+  if (commands.empty()) {
+    mqtt.publishResponse("send", "commands array invalid");
+  } else {
+    for (const auto& cmdStr : commands) {
+      getEbusController().enqueue(PRIO_SEND, ebus::toVector(cmdStr));
+    }
+  }
 }
 
 void Mqtt::handleForward(const cJSON* doc) {
@@ -408,29 +429,31 @@ void Mqtt::handleWrite(const cJSON* doc) {
                         : "";
 
   Command* command = store.findCommand(key);
-  // if (command != nullptr) {
-  //   std::vector<uint8_t> valueBytes = command->getVectorFromJson(doc);
-  //   if (!valueBytes.empty()) {
-  //     std::vector<uint8_t> writeCmd = command->getWriteCmd();
-  //     writeCmd.insert(writeCmd.end(), valueBytes.begin(), valueBytes.end());
-  //     schedule.handleWrite(writeCmd);
-  //     mqtt.publishResponse("write", "scheduled for key '" + key + "' name '" +
-  //                                       command->getName() + "'");
-  //     command->setLast(0);
-  //   } else {
-  //     mqtt.publishResponse("write", "invalid value for key '" + key + "'");
-  //   }
-  // } else {
-  //   mqtt.publishResponse("write", "key '" + key + "' not found");
-  // }
+  if (command != nullptr) {
+    std::vector<uint8_t> valueBytes =
+        command->getVectorFromJson(doc).toVector();
+    if (!valueBytes.empty()) {
+      std::vector<uint8_t> fullWrite = command->getWriteCmd().toVector();
+      fullWrite.insert(fullWrite.end(), valueBytes.begin(), valueBytes.end());
+
+      getEbusController().enqueue(PRIO_SEND, fullWrite);
+      mqtt.publishResponse("write", "scheduled for key '" + key + "' name '" +
+                                        command->getName() + "'");
+      command->setLast(0);
+    } else {
+      mqtt.publishResponse("write", "invalid value for key '" + key + "'");
+    }
+  } else {
+    mqtt.publishResponse("write", "key '" + key + "' not found");
+  }
 }
 
 void Mqtt::checkIncomingQueue() {
-  if (!incomingQueue.empty() && (uint32_t)(esp_timer_get_time() / 1000ULL) >
-                                    lastIncoming + incomingInterval) {
-    lastIncoming = (uint32_t)(esp_timer_get_time() / 1000ULL);
-    IncomingAction action = incomingQueue.front();
-    incomingQueue.pop();
+  if (!incoming_queue_.empty() && (uint32_t)(esp_timer_get_time() / 1000ULL) >
+                                      last_incoming_ + incoming_interval_) {
+    last_incoming_ = (uint32_t)(esp_timer_get_time() / 1000ULL);
+    IncomingAction action = incoming_queue_.front();
+    incoming_queue_.pop();
 
     switch (action.type) {
       case IncomingActionType::Insert:
@@ -454,11 +477,11 @@ void Mqtt::checkIncomingQueue() {
 }
 
 void Mqtt::checkOutgoingQueue() {
-  if (!outgoingQueue.empty() && (uint32_t)(esp_timer_get_time() / 1000ULL) >
-                                    lastOutgoing + outgoingInterval) {
-    lastOutgoing = (uint32_t)(esp_timer_get_time() / 1000ULL);
-    OutgoingAction action = outgoingQueue.front();
-    outgoingQueue.pop();
+  if (!outgoing_queue_.empty() && (uint32_t)(esp_timer_get_time() / 1000ULL) >
+                                      last_outgoing_ + outgoing_interval_) {
+    last_outgoing_ = (uint32_t)(esp_timer_get_time() / 1000ULL);
+    OutgoingAction action = outgoing_queue_.front();
+    outgoing_queue_.pop();
 
     switch (action.type) {
       case OutgoingActionType::Command:
@@ -468,7 +491,7 @@ void Mqtt::checkOutgoingQueue() {
         // publishDevice(action.device);
         break;
       case OutgoingActionType::Component:
-        mqttha.publishComponent(action.command, action.haRemove);
+        mqttha.publishComponent(action.command, action.ha_remove);
         break;
     }
   }

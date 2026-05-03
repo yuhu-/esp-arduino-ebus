@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 // Simple circular buffer logger
 
@@ -33,7 +34,7 @@ class Logger {
     std::string message;
   };
 
-  LogEntry* buffer;
+  std::vector<LogEntry> buffer_;  // Use std::vector for RAII
   size_t maxEntries;
   size_t index;
   size_t entries;

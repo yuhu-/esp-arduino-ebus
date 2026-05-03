@@ -15,6 +15,7 @@
 
 #include "Logger.hpp"
 #include "Store.hpp"
+#include "ebus_accessor.hpp"
 
 Cron cron;
 
@@ -230,37 +231,37 @@ bool getBoolField(const cJSON* doc, const char* name, bool fallback) {
 bool Cron::initFileSystem() { return store.initFileSystem(); }
 
 void Cron::start() {
-  stopRunner = false;
-  if (taskHandle == nullptr) {
-    xTaskCreate(&Cron::taskFunc, "cronRunner", 4096, this, 2, &taskHandle);
+  stop_runner_ = false;
+  if (task_handle_ == nullptr) {
+    xTaskCreate(&Cron::taskFunc, "cronRunner", 4096, this, 2, &task_handle_);
   }
 }
 
-void Cron::stop() { stopRunner = true; }
+void Cron::stop() { stop_runner_ = true; }
 
 Cron::Rule Cron::ruleFromJson(const cJSON* doc) {
   Rule rule;
   rule.id = getStringField(doc, "id");
   rule.schedule = getStringField(doc, "schedule");
-  rule.commandKey = getStringField(doc, "command_key");
+  rule.command_key = getStringField(doc, "command_key");
   rule.enabled = getBoolField(doc, "enabled", true);
 
   const cJSON* valueNode = getField(doc, "value");
   if (valueNode != nullptr) {
     cJSON* clone = cJSON_Duplicate(const_cast<cJSON*>(valueNode), 1);
-    rule.valueJson = printJson(clone, "null");
+    rule.value_json = printJson(clone, "null");
     if (clone != nullptr) cJSON_Delete(clone);
   } else {
-    rule.valueJson = "null";
+    rule.value_json = "null";
   }
 
   return rule;
 }
 
 void Cron::setRules(std::unordered_map<std::string, Rule>&& nextRules) {
-  portENTER_CRITICAL(&rulesMux);
-  rules = std::move(nextRules);
-  portEXIT_CRITICAL(&rulesMux);
+  portENTER_CRITICAL(&rules_mux_);
+  rules_ = std::move(nextRules);
+  portEXIT_CRITICAL(&rules_mux_);
 }
 
 int64_t Cron::loadRules() {
@@ -350,9 +351,9 @@ const std::string Cron::getRulesJson() const {
   cJSON* root = cJSON_CreateArray();
 
   std::vector<Rule> ordered;
-  portENTER_CRITICAL(&rulesMux);
-  for (const auto& kv : rules) ordered.push_back(kv.second);
-  portEXIT_CRITICAL(&rulesMux);
+  portENTER_CRITICAL(&rules_mux_);
+  for (const auto& kv : rules_) ordered.push_back(kv.second);
+  portEXIT_CRITICAL(&rules_mux_);
 
   std::sort(ordered.begin(), ordered.end(),
             [](const Rule& a, const Rule& b) { return a.id < b.id; });
@@ -361,10 +362,10 @@ const std::string Cron::getRulesJson() const {
     cJSON* item = cJSON_CreateObject();
     cJSON_AddStringToObject(item, "id", rule.id.c_str());
     cJSON_AddStringToObject(item, "schedule", rule.schedule.c_str());
-    cJSON_AddStringToObject(item, "command_key", rule.commandKey.c_str());
+    cJSON_AddStringToObject(item, "command_key", rule.command_key.c_str());
     cJSON_AddBoolToObject(item, "enabled", rule.enabled);
 
-    cJSON* valueNode = cJSON_Parse(rule.valueJson.c_str());
+    cJSON* valueNode = cJSON_Parse(rule.value_json.c_str());
     if (valueNode != nullptr)
       cJSON_AddItemToObject(item, "value", valueNode);
     else
@@ -459,8 +460,8 @@ const std::string Cron::evaluate(const cJSON* doc) {
 void Cron::taskFunc(void* arg) {
   Cron* self = static_cast<Cron*>(arg);
   for (;;) {
-    if (self->stopRunner) {
-      self->taskHandle = nullptr;
+    if (self->stop_runner_) {
+      self->task_handle_ = nullptr;
       vTaskDelete(nullptr);
     }
     self->tick();
@@ -480,22 +481,22 @@ void Cron::tick() {
   struct PendingRule {
     std::string id;
     std::string commandKey;
-    std::string valueJson;
+    std::string value_json;
   };
 
   std::vector<PendingRule> pending;
 
-  portENTER_CRITICAL(&rulesMux);
-  for (auto& kv : rules) {
+  portENTER_CRITICAL(&rules_mux_);
+  for (auto& kv : rules_) {
     Rule& rule = kv.second;
     if (!rule.enabled) continue;
-    if (rule.lastTriggeredMinute == minuteStamp) continue;
+    if (rule.last_triggered_minute == minuteStamp) continue;
     if (!matchSchedule(rule.schedule, localTime)) continue;
 
-    rule.lastTriggeredMinute = minuteStamp;
-    pending.push_back({rule.id, rule.commandKey, rule.valueJson});
+    rule.last_triggered_minute = minuteStamp;
+    pending.push_back({rule.id, rule.command_key, rule.value_json});
   }
-  portEXIT_CRITICAL(&rulesMux);
+  portEXIT_CRITICAL(&rules_mux_);
 
   for (const PendingRule& pendingRule : pending) {
     Command* command = store.findCommand(pendingRule.commandKey);
@@ -505,7 +506,7 @@ void Cron::tick() {
       continue;
     }
 
-    cJSON* valueNode = cJSON_Parse(pendingRule.valueJson.c_str());
+    cJSON* valueNode = cJSON_Parse(pendingRule.value_json.c_str());
     if (valueNode == nullptr) {
       logger.warn(std::string("Cron skipped, invalid value for rule: ") +
                   pendingRule.id);
@@ -528,7 +529,7 @@ void Cron::tick() {
     std::vector<uint8_t> writeCmd = command->getWriteCmd().toVector();
     writeCmd.insert(writeCmd.end(), valueBytes.begin(), valueBytes.end());
 
-    // schedule.handleWrite(writeCmd);
+    getEbusController().enqueue(PRIO_SEND, writeCmd);
 
     logger.info(std::string("Cron write triggered: ") + pendingRule.id +
                 " -> " + pendingRule.commandKey);

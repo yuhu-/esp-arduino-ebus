@@ -28,18 +28,18 @@ class Cron {
   struct Rule {
     std::string id;
     std::string schedule;
-    std::string commandKey;
-    std::string valueJson;
+    std::string command_key;
+    std::string value_json;
     bool enabled = true;
-    int64_t lastTriggeredMinute = -1;
+    int64_t last_triggered_minute = -1;
   };
 
-  std::unordered_map<std::string, Rule> rules;
+  std::unordered_map<std::string, Rule> rules_;
 
-  volatile bool stopRunner = false;
-  TaskHandle_t taskHandle = nullptr;
+  volatile bool stop_runner_ = false;
+  TaskHandle_t task_handle_ = nullptr;
 
-  mutable portMUX_TYPE rulesMux = portMUX_INITIALIZER_UNLOCKED;
+  mutable portMUX_TYPE rules_mux_ = portMUX_INITIALIZER_UNLOCKED;
 
   static Rule ruleFromJson(const cJSON* doc);
   void setRules(std::unordered_map<std::string, Rule>&& nextRules);

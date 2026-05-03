@@ -69,33 +69,58 @@ std::string jsonValueToString(cJSON* value) {
 bool Store::initFileSystem() { return ensureLittlefsMounted(); }
 
 void Store::setDataUpdatedCallback(DataUpdatedCallback callback) {
-  dataUpdatedCallback = std::move(callback);
+  data_updated_callback_ = std::move(callback);
 }
 
 void Store::setDataUpdatedLogCallback(DataUpdatedLogCallback callback) {
-  dataUpdatedLogCallback = std::move(callback);
+  data_updated_log_callback_ = std::move(callback);
+}
+
+void Store::setCommandChangedCallback(CommandChangedCallback callback) {
+  command_changed_callback_ = std::move(callback);
+}
+
+void Store::setCommandRemovedCallback(CommandChangedCallback callback) {
+  command_removed_callback_ = std::move(callback);
 }
 
 void Store::insertCommand(const Command& command) {
   // Insert or update in commands map
-  auto it = commands.find(command.getKey());
-  if (it != commands.end())
+  auto it = commands_.find(command.getKey());
+  if (it != commands_.end()) {
     it->second = command;
-  else
-    commands.insert(std::make_pair(command.getKey(), command));
+  } else {
+    it = commands_.insert(std::make_pair(command.getKey(), command)).first;
+  }
+
+  if (command_changed_callback_) command_changed_callback_(&it->second);
 }
 
 void Store::removeCommand(const std::string& key) {
-  auto it = commands.find(key);
-  if (it != commands.end()) commands.erase(it);
+  auto it = commands_.find(key);
+  if (it != commands_.end()) {
+    if (command_removed_callback_) command_removed_callback_(&it->second);
+    commands_.erase(it);
+  }
 }
 
 Command* Store::findCommand(const std::string& key) {
-  auto it = commands.find(key);
-  if (it != commands.end())
+  auto it = commands_.find(key);
+  if (it != commands_.end())
     return &(it->second);
   else
     return nullptr;
+}
+
+std::vector<Command*> Store::findAllMatchingCommands(ebus::ByteView master) {
+  std::vector<Command*> result;
+  for (auto& kv : commands_) {
+    Command* cmd = &kv.second;
+    if (cmd->matches(master)) {
+      result.push_back(cmd);
+    }
+  }
+  return result;
 }
 
 int64_t Store::loadCommands() {
@@ -176,8 +201,8 @@ int64_t Store::wipeCommands() {
 const std::string Store::getCommandsJson() const {
   cJSON* root = cJSON_CreateArray();
 
-  std::vector<std::pair<std::string, Command>> orderedCommands(commands.begin(),
-                                                               commands.end());
+  std::vector<std::pair<std::string, Command>> orderedCommands(
+      commands_.begin(), commands_.end());
 
   std::sort(orderedCommands.begin(), orderedCommands.end(),
             [](const std::pair<std::string, Command>& a,
@@ -198,13 +223,13 @@ const std::string Store::getCommandsJson() const {
 
 const std::vector<Command*> Store::getCommands() {
   std::vector<Command*> result;
-  for (auto& kv : commands) result.push_back(&(kv.second));
+  for (auto& kv : commands_) result.push_back(&(kv.second));
   return result;
 }
 
 size_t Store::getActiveCommands() const {
   size_t count = 0;
-  for (const auto& kv : commands) {
+  for (const auto& kv : commands_) {
     if (kv.second.getActive()) count++;
   }
   return count;
@@ -212,14 +237,14 @@ size_t Store::getActiveCommands() const {
 
 size_t Store::getPassiveCommands() const {
   size_t count = 0;
-  for (const auto& kv : commands) {
+  for (const auto& kv : commands_) {
     if (!kv.second.getActive()) count++;
   }
   return count;
 }
 
 bool Store::active() const {
-  for (const auto& kv : commands) {
+  for (const auto& kv : commands_) {
     if (kv.second.getActive()) return true;
   }
   return false;
@@ -228,7 +253,7 @@ bool Store::active() const {
 Command* Store::nextActiveCommand() {
   Command* next = nullptr;
   bool init = false;
-  for (auto& kv : commands) {
+  for (auto& kv : commands_) {
     Command* cmd = &kv.second;
     // Only consider active commands
     if (!cmd->getActive()) continue;
@@ -252,7 +277,7 @@ Command* Store::nextActiveCommand() {
 
 std::vector<Command*> Store::findPassiveCommands(ebus::ByteView master) {
   std::vector<Command*> result;
-  for (auto& kv : commands) {
+  for (auto& kv : commands_) {
     Command* cmd = &kv.second;
     // Skip active commands
     if (cmd->getActive()) continue;
@@ -277,7 +302,8 @@ std::vector<Command*> Store::updateData(Command* command,
           ebus::range(slave_view, cmd->getPosition(), cmd->getLength()));
     }
     std::string valueJson = cmd->getValueJson();
-    if (dataUpdatedCallback) dataUpdatedCallback(cmd->getName(), valueJson);
+    if (data_updated_callback_)
+      data_updated_callback_(cmd->getName(), valueJson);
 
     cJSON* valueDoc = cJSON_Parse(valueJson.c_str());
     cJSON* valueNode = valueDoc
@@ -291,7 +317,7 @@ std::vector<Command*> Store::updateData(Command* command,
 
     if (valueDoc) cJSON_Delete(valueDoc);
 
-    if (dataUpdatedLogCallback) dataUpdatedLogCallback(payload);
+    if (data_updated_log_callback_) data_updated_log_callback_(payload);
   };
 
   if (command) {
@@ -300,13 +326,12 @@ std::vector<Command*> Store::updateData(Command* command,
     return {command};
   }
 
-  // Passive: potentially multiple matches
-  std::vector<Command*> passiveCommands = findPassiveCommands(master_view);
-  for (Command* cmd : passiveCommands) update(cmd, master_view, slave_view);
+  // Find all matching commands (both active and passive)
+  std::vector<Command*> matchingCommands = findAllMatchingCommands(master_view);
+  for (Command* cmd : matchingCommands) update(cmd, master_view, slave_view);
 
-  return passiveCommands;
+  return matchingCommands;
 }
-
 const std::string Store::getValueFullJson(const Command* command) {
   cJSON* doc = cJSON_CreateObject();
 
@@ -340,8 +365,8 @@ const std::string Store::getValueFullJson(const Command* command) {
 const std::string Store::getValuesJson() const {
   cJSON* root = cJSON_CreateArray();
 
-  std::vector<std::pair<std::string, Command>> orderedCommands(commands.begin(),
-                                                               commands.end());
+  std::vector<std::pair<std::string, Command>> orderedCommands(
+      commands_.begin(), commands_.end());
 
   std::sort(orderedCommands.begin(), orderedCommands.end(),
             [](const std::pair<std::string, Command>& a,
@@ -381,7 +406,7 @@ const std::string Store::serializeCommands() const {
   cJSON_AddItemToArray(doc, header);
 
   // Add each command as an array of values in the same order as header
-  for (const auto& cmd : commands) {
+  for (const auto& cmd : commands_) {
     cJSON* cmdDoc = cJSON_Parse(cmd.second.toJson().c_str());
     if (!cJSON_IsObject(cmdDoc)) {
       if (cmdDoc) cJSON_Delete(cmdDoc);

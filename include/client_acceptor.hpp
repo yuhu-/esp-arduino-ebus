@@ -6,45 +6,48 @@
 
 #include <cstdint>
 #include <ebus/controller.hpp>
+#include <ebus_accessor.hpp>
 #include <memory>
 #include <vector>
 
 // ClientManager handles all connected clients and routes data between them and
 // the eBus It supports ReadOnly, Regular, and Enhanced clients.
 
-class ClientManager {
+class ClientAcceptor {
  public:
-  ClientManager();
+  ClientAcceptor();
 
-  void start(ebus::Controller* controller);
+  void start();
   void stop();
 
  private:
   struct ServerSocket {
     uint16_t port;
-    int listenFd = -1;
+    int listen_fd = -1;
   };
 
-  ServerSocket readonlyServer{3334};
-  ServerSocket regularServer{3333};
-  ServerSocket enhancedServer{3335};
+  ServerSocket readonly_server_{3334};
+  ServerSocket regular_server_{3333};
+  ServerSocket enhanced_server_{3335};
 
-  volatile bool stopRunner = false;
-  ebus::Controller* controller = nullptr;
+  ebus::Controller& controller_;
 
   struct ConnectedClient {
     int fd;
   };
-  std::vector<ConnectedClient> clients;
+  std::vector<ConnectedClient> clients_;
 
-  TaskHandle_t clientManagerTaskHandle;
+  portMUX_TYPE clients_mux_ = portMUX_INITIALIZER_UNLOCKED;
+
+  TaskHandle_t client_acceptor_task_handle_;
 
   static void taskFunc(void* arg);
 
   static bool createListenSocket(ServerSocket& server);
   static int acceptClient(ServerSocket& server);
   void acceptClients();
+  void closeListenSockets();
 };
 
-extern ClientManager clientManager;
+extern ClientAcceptor client_acceptor;
 #endif

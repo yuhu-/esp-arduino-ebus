@@ -1,9 +1,9 @@
 #pragma once
 
 #if defined(EBUS_INTERNAL)
-#include <ebus.hpp>
 #include <cJSON.h>
 
+#include <ebus.hpp>
 #include <functional>
 #include <string>
 #include <unordered_map>
@@ -22,6 +22,8 @@ using DataUpdatedCallback =
 
 using DataUpdatedLogCallback = std::function<void(const std::string& message)>;
 
+using CommandChangedCallback = std::function<void(Command* command)>;
+
 class Store {
  public:
   bool initFileSystem();
@@ -29,9 +31,13 @@ class Store {
   void setDataUpdatedCallback(DataUpdatedCallback callback);
   void setDataUpdatedLogCallback(DataUpdatedLogCallback callback);
 
+  void setCommandChangedCallback(CommandChangedCallback callback);
+  void setCommandRemovedCallback(CommandChangedCallback callback);
+
   void insertCommand(const Command& command);
   void removeCommand(const std::string& key);
   Command* findCommand(const std::string& key);
+  std::vector<Command*> findAllMatchingCommands(ebus::ByteView master);
 
   int64_t loadCommands();
   int64_t saveCommands() const;
@@ -49,8 +55,7 @@ class Store {
   Command* nextActiveCommand();
   std::vector<Command*> findPassiveCommands(ebus::ByteView master);
 
-  std::vector<Command*> updateData(Command* command,
-                                   ebus::ByteView master_view,
+  std::vector<Command*> updateData(Command* command, ebus::ByteView master_view,
                                    ebus::ByteView slave_view);
 
   static const std::string getValueFullJson(const Command* command);
@@ -59,10 +64,13 @@ class Store {
 
  private:
   // Single unified map for all commands, indexed by key
-  std::unordered_map<std::string, Command> commands;
+  std::unordered_map<std::string, Command> commands_;
 
-  DataUpdatedCallback dataUpdatedCallback = nullptr;
-  DataUpdatedLogCallback dataUpdatedLogCallback = nullptr;
+  DataUpdatedCallback data_updated_callback_ = nullptr;
+  DataUpdatedLogCallback data_updated_log_callback_ = nullptr;
+
+  CommandChangedCallback command_changed_callback_ = nullptr;
+  CommandChangedCallback command_removed_callback_ = nullptr;
 
   // Flexible serialization/deserialization
   const std::string serializeCommands() const;

@@ -13,6 +13,9 @@
 class Command {
  public:
   // Internal fields accessors
+  const uint32_t& getPollId() const;
+  void setPollId(const uint32_t id);
+
   const uint32_t& getLast() const;
   void setLast(const uint32_t time);
 
@@ -73,6 +76,8 @@ class Command {
 
  private:
   // Internal fields
+  // polling id
+  uint32_t poll_id = 0;
   // last time of the successful command
   uint32_t last = 0;
   // received raw data
