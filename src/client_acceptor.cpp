@@ -27,6 +27,9 @@ void ClientAcceptor::start() {
 }
 
 void ClientAcceptor::stop() {
+  if (client_acceptor_task_handle_ != nullptr)
+    xTaskNotifyGive(client_acceptor_task_handle_);
+
   // Ensure listening sockets are closed when stopping
   closeListenSockets();
 }
