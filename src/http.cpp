@@ -1,48 +1,99 @@
 #include "http.hpp"
 
-#include <cJSON.h>
-#include <cstdlib>
-#include <cstdio>
 #include <esp_timer.h>
 #include <esp_wifi.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+
+#include <array>
+#include <cstdio>
+#include <cstdlib>
+#include <ebus/detail/json_reader.hpp>
+#include <ebus/detail/json_writer.hpp>
 #include <string>
 #include <vector>
-#include "Adc.hpp"
 
-#include "ConfigManager.hpp"
-#include "Cron.hpp"
-#include "DeviceManager.hpp"
-#include "HttpUtils.hpp"
-#include "Logger.hpp"
-#include "MqttHA.hpp"
-#include "Schedule.hpp"
-#include "Store.hpp"
-#include "WifiNetworkManager.hpp"
+#include "adc.hpp"
+#include "command_manager.hpp"
+#include "config_manager.hpp"
+#include "cron.hpp"
+#include "ebus_accessor.hpp"
+#include "http_utils.hpp"
+#include "logger.hpp"
 #include "main.hpp"
+#include "mqtt.hpp"
+#include "mqtt_ha.hpp"
+#include "wifi_network_manager.hpp"
 
 static httpd_handle_t configServer = nullptr;
 static bool fallbackHandlersRegistered = false;
 
 namespace {
+// cppcheck-suppress syntaxError
 extern const char common_css_start[] asm("_binary_common_css_start");
+// cppcheck-suppress syntaxError
 extern const char common_js_start[] asm("_binary_common_js_start");
 
+// cppcheck-suppress syntaxError
 extern const char root_html_start[] asm("_binary_root_html_start");
+// cppcheck-suppress syntaxError
 extern const char status_html_start[] asm("_binary_status_html_start");
+// cppcheck-suppress syntaxError
 extern const char adc_html_start[] asm("_binary_adc_html_start");
+// cppcheck-suppress syntaxError
 extern const char config_html_start[] asm("_binary_config_html_start");
+// cppcheck-suppress syntaxError
 extern const char upgrade_html_start[] asm("_binary_upgrade_html_start");
+// cppcheck-suppress syntaxError
 extern const char commands_html_start[] asm("_binary_commands_html_start");
+// cppcheck-suppress syntaxError
 extern const char cron_html_start[] asm("_binary_cron_html_start");
+// cppcheck-suppress syntaxError
 extern const char values_html_start[] asm("_binary_values_html_start");
+// cppcheck-suppress syntaxError
 extern const char devices_html_start[] asm("_binary_devices_html_start");
-extern const char statistics_html_start[] asm("_binary_statistics_html_start");
+// cppcheck-suppress syntaxError
+extern const char metrics_html_start[] asm("_binary_metrics_html_start");
+// cppcheck-suppress syntaxError
 extern const char logs_html_start[] asm("_binary_logs_html_start");
 
+#if defined(EBUS_INTERNAL)
+// Helper to prepare a JsonReader for iterating over an array of commands/keys.
+// Handles both bare arrays and objects with a specific array key (e.g.,
+// {"commands": [...]}). On success, the reader is positioned at the start of
+// the array. On failure, returns false and populates error_out.
+static bool prepareJsonReaderForArray(ebus::detail::JsonReader& reader,
+                                      std::string_view expected_array_key,
+                                      std::string& error_out) {
+  auto token = reader.next();  // Read the first token
+
+  if (token == ebus::detail::JsonReader::Token::object_start) {
+    // If the root is an object, try to find the expected array key
+    if (reader.findKey(expected_array_key)) {
+      token = reader.next();  // Advance to the value of the key
+    } else {
+      // If the key is not found, and we expected one, it's an error
+      error_out = "JSON object must contain a '" +
+                  std::string(expected_array_key) + "' key.";
+      return false;
+    }  // If the root is a direct array, and we expected a key, that's fine.
+  } else if (token != ebus::detail::JsonReader::Token::array_start) {
+    // If it's neither an object nor a direct array, it's an error.
+    error_out = "JSON root must be an object or a direct array.";
+    return false;
+  }
+
+  if (token != ebus::detail::JsonReader::Token::array_start) {
+    error_out = "Expected a JSON array.";
+    return false;
+  }
+  return true;
+}
+#endif
+
 void sendStatic(httpd_req_t* req, const char* contentType, const char* data) {
-  HttpUtils::sendResponse(req, "200 OK", contentType, std::string(data));
+  // HttpUtils::sendResponse(req, "200 OK", contentType, std::string(data));
+  HttpUtils::sendResponse(req, "200 OK", contentType, data);
 }
 
 uint32_t parseAdcArg(httpd_req_t* req, const char* key, uint32_t fallback) {
@@ -69,7 +120,7 @@ uint32_t parseAdcChannelMask(httpd_req_t* req) {
   if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK)
     return 0x03;
 
-  char value[128] = {};
+  char value[128] = {0};
   if (httpd_query_key_value(query, "channels", value, sizeof(value)) != ESP_OK)
     return 0x03;
 
@@ -85,126 +136,7 @@ uint32_t parseAdcChannelMask(httpd_req_t* req) {
     else
       break;
   }
-
   return mask == 0 ? 0x03 : mask;
-}
-
-esp_err_t handleRoot(httpd_req_t* req) {
-  sendStatic(req, "text/html", root_html_start);
-  return ESP_OK;
-}
-
-esp_err_t handleStatusPage(httpd_req_t* req) {
-  sendStatic(req, "text/html", status_html_start);
-  return ESP_OK;
-}
-
-esp_err_t handleAdcPage(httpd_req_t* req) {
-  sendStatic(req, "text/html", adc_html_start);
-  return ESP_OK;
-}
-
-esp_err_t handleAdcRaw(httpd_req_t* req) {
-  if (!adc.isRunning() && !adc.begin()) {
-    HttpUtils::sendResponse(req, "500 Internal Server Error",
-                            "application/json;charset=utf-8",
-                            "{\"error\":\"adc not running\"}");
-    return ESP_OK;
-  }
-
-  const uint32_t sampleRate = parseAdcArg(req, "sample_rate", 30000);
-  const uint32_t samplesPerChannel =
-      parseAdcArg(req, "samples_per_channel", parseAdcArg(req, "sample_count", 2400));
-  const uint32_t channelMask = parseAdcChannelMask(req);
-    const uint32_t effectivePerChannelRate =
-      adc.effectivePerChannelSampleRate(sampleRate, channelMask);
-    const uint32_t activeChannelCount =
-      static_cast<uint32_t>(__builtin_popcount(channelMask & 0x1F));
-    const uint32_t controllerRate =
-      effectivePerChannelRate * (activeChannelCount == 0 ? 1U : activeChannelCount);
-
-  const uint64_t captureStartMillis =
-      static_cast<uint64_t>(esp_timer_get_time() / 1000ULL);
-
-  char tmp1[32], tmp2[32], tmp3[32], tmp4[32], tmp5[32], tmp6[32];
-  httpd_resp_set_status(req, "200 OK");
-  httpd_resp_set_type(req, "application/octet-stream");
-  httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
-  httpd_resp_set_hdr(req, "X-ADC-Format", "esp32c3-ch12c3-le16");
-  
-  std::snprintf(tmp1, sizeof(tmp1), "%u",
-                static_cast<unsigned>(effectivePerChannelRate));
-  httpd_resp_set_hdr(req, "X-ADC-Sample-Rate", tmp1);
-  
-  std::snprintf(tmp2, sizeof(tmp2), "%u",
-                static_cast<unsigned>(samplesPerChannel));
-  httpd_resp_set_hdr(req, "X-ADC-Samples", tmp2);
-  
-  std::snprintf(tmp3, sizeof(tmp3), "%u", static_cast<unsigned>(channelMask));
-  httpd_resp_set_hdr(req, "X-ADC-Channel-Mask", tmp3);
-  
-  std::snprintf(tmp4, sizeof(tmp4), "%u",
-                static_cast<unsigned>(Adc::RESULT_BYTES));
-  httpd_resp_set_hdr(req, "X-ADC-Result-Bytes", tmp4);
-  std::snprintf(tmp5, sizeof(tmp5), "%llu",
-                static_cast<unsigned long long>(captureStartMillis));
-  httpd_resp_set_hdr(req, "X-ADC-Capture-Start-Millis", tmp5);
-  std::snprintf(tmp6, sizeof(tmp6), "%u", static_cast<unsigned>(controllerRate));
-  httpd_resp_set_hdr(req, "X-ADC-Controller-Sample-Rate", tmp6);
-
-  if (!adc.streamRaw(req, sampleRate, samplesPerChannel, channelMask))
-    return ESP_FAIL;
-  httpd_resp_send_chunk(req, nullptr, 0);
-  return ESP_OK;
-}
-
-esp_err_t handleAdcEnable(httpd_req_t* req) {
-  const bool started = adc.begin();
-  if (started)
-    HttpUtils::sendResponse(req, "200 OK", "text/plain", "ADC enabled");
-  else
-    HttpUtils::sendResponse(req, "500 Internal Server Error", "text/plain",
-                            "ADC enable failed");
-  return ESP_OK;
-}
-
-esp_err_t handleAdcDisable(httpd_req_t* req) {
-  adc.stop();
-  HttpUtils::sendResponse(req, "200 OK", "text/plain", "ADC disabled");
-  return ESP_OK;
-}
-
-esp_err_t handleAdcState(httpd_req_t* req) {
-  cJSON* root = cJSON_CreateObject();
-  cJSON_AddBoolToObject(root, "running", adc.isRunning());
-  char* out = cJSON_PrintUnformatted(root);
-  cJSON_Delete(root);
-  if (out == nullptr) {
-    HttpUtils::sendResponse(req, "500 Internal Server Error",
-                            "application/json;charset=utf-8",
-                            "{\"error\":\"json allocation failed\"}");
-    return ESP_OK;
-  }
-
-  HttpUtils::sendResponse(req, "200 OK", "application/json;charset=utf-8", out);
-  free(out);
-  return ESP_OK;
-}
-
-esp_err_t handleStatusApi(httpd_req_t* req) {
-  HttpUtils::sendResponse(req, "200 OK", "application/json;charset=utf-8",
-                          getStatusJson());
-  return ESP_OK;
-}
-
-esp_err_t handleConfigPage(httpd_req_t* req) {
-  sendStatic(req, "text/html", config_html_start);
-  return ESP_OK;
-}
-
-esp_err_t handleUpgradePage(httpd_req_t* req) {
-  sendStatic(req, "text/html", upgrade_html_start);
-  return ESP_OK;
 }
 
 esp_err_t handleCommonCss(httpd_req_t* req) {
@@ -217,102 +149,238 @@ esp_err_t handleCommonJs(httpd_req_t* req) {
   return ESP_OK;
 }
 
-esp_err_t handleRestart(httpd_req_t* req) {
-  HttpUtils::sendResponse(req, "200 OK", "text/html", "Restarting...");
-  vTaskDelay(pdMS_TO_TICKS(500));
-  restart();
+esp_err_t handleRoot(httpd_req_t* req) {
+  sendStatic(req, "text/html", root_html_start);
+  return ESP_OK;
+}
+
+esp_err_t handleConfigPage(httpd_req_t* req) {
+  sendStatic(req, "text/html", config_html_start);
   return ESP_OK;
 }
 
 esp_err_t handleWifiScan(httpd_req_t* req) {
-  // Start WiFi scan
-  wifi_scan_config_t scanConfig = {
-    .ssid = nullptr,
-    .bssid = nullptr,
-    .channel = 0,
-    .show_hidden = true,
-    .scan_type = WIFI_SCAN_TYPE_ACTIVE,
-    .scan_time = {
-      .active = {
-        .min = 0,
-        .max = 0
-      },
-      .passive = 100
-    }
-  };
+  wifi_scan_config_t scanConfig = {};
+  scanConfig.show_hidden = true;
+  scanConfig.scan_type = WIFI_SCAN_TYPE_ACTIVE;
+  scanConfig.scan_time.active.min = 0;
+  scanConfig.scan_time.active.max = 0;
+  scanConfig.scan_time.passive = 100;
 
   esp_err_t err = esp_wifi_scan_start(&scanConfig, true);
   if (err != ESP_OK) {
-    HttpUtils::sendResponse(req, "500 Internal Server Error", "application/json",
-                           "{\"error\":\"WiFi scan failed\"}");
+    HttpUtils::sendErrorResponse(req, "500 Internal Server Error", "wifi_scan",
+                                 "WiFi scan failed");
     return ESP_OK;
   }
 
-  // Get scan results
   uint16_t apCount = 0;
   esp_wifi_scan_get_ap_num(&apCount);
 
-  if (apCount == 0) {
-    HttpUtils::sendResponse(req, "200 OK", "application/json", "[]");
+  // Cap the number of records we read to avoid heap-allocating for every AP.
+  // ESP32-C3 scans rarely see more than ~30 visible APs; 64 gives headroom
+  // without a heap allocation (replaces std::vector<wifi_ap_record_t>).
+  static constexpr size_t max_scan_aps = 64;
+  size_t scan_count = std::min(static_cast<uint16_t>(max_scan_aps), apCount);
+  static std::array<wifi_ap_record_t, max_scan_aps> aps{};
+  apCount = static_cast<uint16_t>(scan_count);
+  esp_wifi_scan_get_ap_records(&apCount, aps.data());
+
+  httpd_resp_set_type(req, "application/json;charset=utf-8");
+  HttpUtils::applyCustomHeaders(req);
+  ebus::detail::JsonWriter writer([req](std::string_view chunk) {
+    httpd_resp_send_chunk(req, chunk.data(), chunk.size());
+  });
+
+  {
+    auto array_scope = writer.arrayScope();
+    for (size_t i = 0; i < scan_count; ++i) {
+      const auto& ap = aps[i];
+      auto obj_scope = writer.objectScope();
+      char ssid_buf[33];
+      size_t ssid_len = strnlen(reinterpret_cast<const char*>(ap.ssid), 32);
+      memcpy(ssid_buf, ap.ssid, ssid_len);
+      ssid_buf[ssid_len] = '\0';
+      writer.writeField("ssid", ssid_buf);
+      char bssidStr[18];
+      snprintf(bssidStr, sizeof(bssidStr), "%02x:%02x:%02x:%02x:%02x:%02x",
+               ap.bssid[0], ap.bssid[1], ap.bssid[2], ap.bssid[3], ap.bssid[4],
+               ap.bssid[5]);
+      writer.writeField("bssid", bssidStr);
+      writer.writeField("rssi", ap.rssi);
+      writer.writeField("channel", ap.primary);
+
+      const char* authMode = "UNKNOWN";
+      switch (ap.authmode) {
+        case WIFI_AUTH_OPEN:
+          authMode = "OPEN";
+          break;
+        case WIFI_AUTH_WEP:
+          authMode = "WEP";
+          break;
+        case WIFI_AUTH_WPA_PSK:
+          authMode = "WPA_PSK";
+          break;
+        case WIFI_AUTH_WPA2_PSK:
+          authMode = "WPA2_PSK";
+          break;
+        case WIFI_AUTH_WPA_WPA2_PSK:
+          authMode = "WPA_WPA2_PSK";
+          break;
+        case WIFI_AUTH_WPA2_ENTERPRISE:
+          authMode = "WPA2_ENTERPRISE";
+          break;
+        case WIFI_AUTH_WPA3_PSK:
+          authMode = "WPA3_PSK";
+          break;
+        case WIFI_AUTH_WPA2_WPA3_PSK:
+          authMode = "WPA2_WPA3_PSK";
+          break;
+        default:
+          break;
+      }
+      writer.writeField("authMode", authMode);
+    }
+  }
+  httpd_resp_send_chunk(req, nullptr, 0);
+  esp_wifi_clear_ap_list();
+  return ESP_OK;
+}
+
+esp_err_t handleUpgradePage(httpd_req_t* req) {
+  sendStatic(req, "text/html", upgrade_html_start);
+  return ESP_OK;
+}
+
+esp_err_t handleStatusPage(httpd_req_t* req) {
+  sendStatic(req, "text/html", status_html_start);
+  return ESP_OK;
+}
+
+esp_err_t handleStatus(httpd_req_t* req) {
+  httpd_resp_set_type(req, "application/json;charset=utf-8");
+  HttpUtils::applyCustomHeaders(req);
+  fetchStatus([req](std::string_view chunk) {
+    httpd_resp_send_chunk(req, chunk.data(), chunk.size());
+  });
+  httpd_resp_send_chunk(req, nullptr, 0);
+  return ESP_OK;
+}
+
+#if defined(EBUS_INTERNAL)
+esp_err_t handleStatusApp(httpd_req_t* req) {
+  httpd_resp_set_type(req, "application/json;charset=utf-8");
+  HttpUtils::applyCustomHeaders(req);
+  fetchAppStatus([req](std::string_view chunk) {
+    httpd_resp_send_chunk(req, chunk.data(), chunk.size());
+  });
+  httpd_resp_send_chunk(req, nullptr, 0);
+  return ESP_OK;
+}
+
+esp_err_t handleStatusLib(httpd_req_t* req) {
+  httpd_resp_set_type(req, "application/json;charset=utf-8");
+  HttpUtils::applyCustomHeaders(req);
+  getEbusController().fetchStatus([req](std::string_view chunk) {
+    httpd_resp_send_chunk(req, chunk.data(), chunk.size());
+  });
+  httpd_resp_send_chunk(req, nullptr, 0);
+  return ESP_OK;
+}
+#endif
+
+esp_err_t handleAdcPage(httpd_req_t* req) {
+  sendStatic(req, "text/html", adc_html_start);
+  return ESP_OK;
+}
+
+esp_err_t handleAdcRaw(httpd_req_t* req) {
+  if (!adc.isRunning() && !adc.begin()) {
+    HttpUtils::sendErrorResponse(req, "500 Internal Server Error", "adc_raw",
+                                 "ADC not running or failed to start");
     return ESP_OK;
   }
 
-  std::vector<wifi_ap_record_t> aps(apCount);
-  esp_wifi_scan_get_ap_records(&apCount, aps.data());
+  const uint32_t sampleRate = parseAdcArg(req, "sample_rate", 30000);
+  const uint32_t samplesPerChannel = parseAdcArg(
+      req, "samples_per_channel", parseAdcArg(req, "sample_count", 2400));
+  const uint32_t channelMask = parseAdcChannelMask(req);
+  const uint32_t effectivePerChannelRate =
+      adc.effectivePerChannelSampleRate(sampleRate, channelMask);
+  const uint32_t activeChannelCount =
+      static_cast<uint32_t>(__builtin_popcount(channelMask & 0x1F));
+  const uint32_t controllerRate =
+      effectivePerChannelRate *
+      (activeChannelCount == 0 ? 1U : activeChannelCount);
 
-  // Build JSON response
-  cJSON* root = cJSON_CreateArray();
+  const uint64_t captureStartMillis =
+      static_cast<uint64_t>(esp_timer_get_time() / 1000ULL);
 
-  for (uint16_t i = 0; i < apCount; ++i) {
-    const wifi_ap_record_t& ap = aps[i];
-    
-    cJSON* item = cJSON_CreateObject();
-    
-    // SSID
-    std::string ssid(reinterpret_cast<const char*>(ap.ssid),
-                    strnlen(reinterpret_cast<const char*>(ap.ssid), 32));
-    cJSON_AddStringToObject(item, "ssid", ssid.c_str());
-    
-    // BSSID (MAC address)
-    char bssidStr[18];
-    snprintf(bssidStr, sizeof(bssidStr), "%02x:%02x:%02x:%02x:%02x:%02x",
-             ap.bssid[0], ap.bssid[1], ap.bssid[2],
-             ap.bssid[3], ap.bssid[4], ap.bssid[5]);
-    cJSON_AddStringToObject(item, "bssid", bssidStr);
-    
-    // Signal strength (RSSI)
-    cJSON_AddNumberToObject(item, "rssi", ap.rssi);
-    
-    // Channel
-    cJSON_AddNumberToObject(item, "channel", ap.primary);
-    
-    // Security type
-    const char* authMode = "UNKNOWN";
-    switch (ap.authmode) {
-      case WIFI_AUTH_OPEN: authMode = "OPEN"; break;
-      case WIFI_AUTH_WEP: authMode = "WEP"; break;
-      case WIFI_AUTH_WPA_PSK: authMode = "WPA_PSK"; break;
-      case WIFI_AUTH_WPA2_PSK: authMode = "WPA2_PSK"; break;
-      case WIFI_AUTH_WPA_WPA2_PSK: authMode = "WPA_WPA2_PSK"; break;
-      case WIFI_AUTH_WPA2_ENTERPRISE: authMode = "WPA2_ENTERPRISE"; break;
-      case WIFI_AUTH_WPA3_PSK: authMode = "WPA3_PSK"; break;
-      case WIFI_AUTH_WPA2_WPA3_PSK: authMode = "WPA2_WPA3_PSK"; break;
-      default: break;
-    }
-    cJSON_AddStringToObject(item, "authMode", authMode);
-    
-    cJSON_AddItemToArray(root, item);
+  char tmp1[32], tmp2[32], tmp3[32], tmp4[32], tmp5[32], tmp6[32];
+  httpd_resp_set_status(req, "200 OK");
+  httpd_resp_set_type(req, "application/octet-stream");
+  httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+  httpd_resp_set_hdr(req, "X-ADC-Format", "esp32c3-ch12c3-le16");
+  HttpUtils::applyCustomHeaders(req);
+
+  std::snprintf(tmp1, sizeof(tmp1), "%u",
+                static_cast<unsigned>(effectivePerChannelRate));
+  httpd_resp_set_hdr(req, "X-ADC-Sample-Rate", tmp1);
+
+  std::snprintf(tmp2, sizeof(tmp2), "%u",
+                static_cast<unsigned>(samplesPerChannel));
+  httpd_resp_set_hdr(req, "X-ADC-Samples", tmp2);
+
+  std::snprintf(tmp3, sizeof(tmp3), "%u", static_cast<unsigned>(channelMask));
+  httpd_resp_set_hdr(req, "X-ADC-Channel-Mask", tmp3);
+
+  std::snprintf(tmp4, sizeof(tmp4), "%u",
+                static_cast<unsigned>(Adc::result_bytes));
+  httpd_resp_set_hdr(req, "X-ADC-Result-Bytes", tmp4);
+  std::snprintf(tmp5, sizeof(tmp5), "%llu",
+                static_cast<unsigned long long>(captureStartMillis));
+  httpd_resp_set_hdr(req, "X-ADC-Capture-Start-Millis", tmp5);
+  std::snprintf(tmp6, sizeof(tmp6), "%u",
+                static_cast<unsigned>(controllerRate));
+  httpd_resp_set_hdr(req, "X-ADC-Controller-Sample-Rate", tmp6);
+
+  if (!adc.streamRaw(
+          [req](std::string_view chunk) {
+            httpd_resp_send_chunk(req, chunk.data(), chunk.size());
+          },
+          sampleRate, samplesPerChannel, channelMask))
+    return ESP_FAIL;
+  httpd_resp_send_chunk(req, nullptr, 0);
+  return ESP_OK;
+}
+
+esp_err_t handleAdcState(httpd_req_t* req) {
+  httpd_resp_set_type(req, "application/json;charset=utf-8");
+  HttpUtils::applyCustomHeaders(req);
+  {
+    ebus::detail::JsonWriter writer([req](std::string_view chunk) {
+      httpd_resp_send_chunk(req, chunk.data(), chunk.size());
+    });
+    auto scope = writer.objectScope();
+    writer.writeField("running", adc.isRunning());
   }
+  httpd_resp_send_chunk(req, nullptr, 0);
+  return ESP_OK;
+}
 
-  // Convert JSON to string and send response
-  char* jsonString = cJSON_Print(root);
-  HttpUtils::sendResponse(req, "200 OK", "application/json", jsonString);
-  
-  cJSON_Delete(root);
-  free(jsonString);
-  
-  esp_wifi_clear_ap_list();
+esp_err_t handleAdcEnable(httpd_req_t* req) {
+  if (adc.begin()) {
+    HttpUtils::sendSuccessResponse(req, "adc_enable");
+  } else {
+    HttpUtils::sendErrorResponse(req, "500 Internal Server Error", "adc_enable",
+                                 "ADC enable failed");
+  }
+  return ESP_OK;
+}
 
+esp_err_t handleAdcDisable(httpd_req_t* req) {
+  adc.stop();
+  HttpUtils::sendSuccessResponse(req, "adc_disable");
   return ESP_OK;
 }
 
@@ -323,120 +391,276 @@ esp_err_t handleCommandsPage(httpd_req_t* req) {
 }
 
 esp_err_t handleCommands(httpd_req_t* req) {
-  HttpUtils::sendResponse(req, "200 OK", "application/json;charset=utf-8",
-                          store.getCommandsJson());
+  httpd_resp_set_type(req, "application/json;charset=utf-8");
+  HttpUtils::applyCustomHeaders(req);
+  commandManager.fetchCommands([req](std::string_view chunk) {
+    httpd_resp_send_chunk(req, chunk.data(), chunk.size());
+  });
+  httpd_resp_send_chunk(req, nullptr, 0);
   return ESP_OK;
 }
 
 esp_err_t handleCommandsEvaluate(httpd_req_t* req) {
-  cJSON* doc = cJSON_Parse(HttpUtils::readBody(req).c_str());
-  if (!cJSON_IsArray(doc)) {
-    HttpUtils::sendResponse(req, "403 Forbidden", "text/html", "Json invalid");
-  } else {
-    cJSON* command = nullptr;
-    cJSON_ArrayForEach(command, doc) {
-      std::string evalError = Command::evaluate(command);
-      if (!evalError.empty()) {
-        cJSON_Delete(doc);
-        HttpUtils::sendResponse(req, "403 Forbidden", "text/html", evalError.c_str());
-        return ESP_OK;
-      }
-    }
-    HttpUtils::sendResponse(req, "200 OK", "text/html", "Ok");
+  HttpUtils::StreamingReader sr(req);
+  if (!sr.isValid() || !sr.feedAll()) {
+    HttpUtils::sendErrorResponse(req, "400 Bad Request", "evaluate",
+                                 "Request body too large or invalid");
+    return ESP_OK;
   }
-  if (doc) cJSON_Delete(doc);
+  sr.endOfInput();
+
+  ebus::detail::JsonReader& reader = sr.jsonReader();
+  std::string parse_error;
+  if (!prepareJsonReaderForArray(reader, "commands", parse_error)) {
+    HttpUtils::sendErrorResponse(req, "400 Bad Request", "evaluate",
+                                 parse_error);
+    return ESP_OK;
+  }
+
+  std::string_view evalError;
+  bool headerSeen = false;
+  while (true) {
+    std::string_view row_sv = reader.rawValue();
+    if (row_sv.empty()) break;
+    ebus::detail::JsonReader row_reader(row_sv);
+    auto row_token = row_reader.next();
+
+    if (row_token == ebus::detail::JsonReader::Token::array_start) {
+      if (!headerSeen) {
+        headerSeen = true;
+        continue;
+      }
+    } else if (row_token == ebus::detail::JsonReader::Token::object_start) {
+      row_reader.reset();
+      evalError = Command::evaluate(row_reader);
+      if (!evalError.empty()) break;
+    }
+  }
+
+  if (!evalError.empty())
+    HttpUtils::sendErrorResponse(req, "400 Bad Request", "evaluate", evalError);
+  else
+    HttpUtils::sendSuccessResponse(req, "evaluate");
+
   return ESP_OK;
 }
 
 esp_err_t handleCommandsInsert(httpd_req_t* req) {
-  cJSON* doc = cJSON_Parse(HttpUtils::readBody(req).c_str());
-  if (!cJSON_IsArray(doc)) {
-    HttpUtils::sendResponse(req, "403 Forbidden", "text/html", "Json invalid");
-  } else {
-    cJSON* command = nullptr;
-    cJSON_ArrayForEach(command, doc) {
-      std::string evalError = Command::evaluate(command);
-      if (evalError.empty()) {
-        store.insertCommand(Command::fromJson(command));
-      } else {
-        cJSON_Delete(doc);
-        HttpUtils::sendResponse(req, "403 Forbidden", "text/html", evalError.c_str());
-        return ESP_OK;
-      }
-    }
-    if (mqttha.isEnabled()) mqttha.publishComponents();
-    HttpUtils::sendResponse(req, "200 OK", "text/html", "Ok");
+  HttpUtils::StreamingReader sr(req);
+  if (!sr.isValid() || !sr.feedAll()) {
+    HttpUtils::sendErrorResponse(req, "400 Bad Request", "insert",
+                                 "Request body too large or invalid");
+    return ESP_OK;
   }
-  if (doc) cJSON_Delete(doc);
+  sr.endOfInput();
+
+  std::string_view body_sv = sr.jsonReader().remaining();
+
+  ebus::detail::JsonReader reader_eval(body_sv);
+  std::string parse_error;
+  if (!prepareJsonReaderForArray(reader_eval, "commands", parse_error)) {
+    HttpUtils::sendErrorResponse(req, "400 Bad Request", "insert", parse_error);
+    return ESP_OK;
+  }
+
+  std::string_view evalError;
+  bool headerSeen = false;
+  while (true) {
+    std::string_view cmd_sv = reader_eval.rawValue();
+    if (cmd_sv.empty()) break;
+    ebus::detail::JsonReader row_reader(cmd_sv);
+    auto row_token = row_reader.next();
+    if (row_token == ebus::detail::JsonReader::Token::array_start) {
+      if (!headerSeen) {
+        headerSeen = true;
+        continue;
+      }
+    } else if (row_token == ebus::detail::JsonReader::Token::object_start) {
+      row_reader.reset();
+      evalError = Command::evaluate(row_reader);
+      if (!evalError.empty()) break;
+    }
+  }
+
+  if (!evalError.empty()) {
+    HttpUtils::sendErrorResponse(req, "400 Bad Request", "insert", evalError);
+    return ESP_OK;
+  }
+
+  ebus::detail::JsonReader reader_insert(body_sv);
+  prepareJsonReaderForArray(reader_insert, "commands", parse_error);
+  headerSeen = false;
+  while (true) {
+    std::string_view cmd_sv = reader_insert.rawValue();
+    if (cmd_sv.empty()) break;
+    ebus::detail::JsonReader row_reader(cmd_sv);
+    auto row_token = row_reader.next();
+    if (row_token == ebus::detail::JsonReader::Token::array_start) {
+      if (!headerSeen) {
+        headerSeen = true;
+        continue;
+      }
+      row_reader.reset();
+      commandManager.insertCommand(Command::fromTabular(row_reader));
+    } else if (row_token == ebus::detail::JsonReader::Token::object_start) {
+      row_reader.reset();
+      commandManager.insertCommand(Command::fromJson(row_reader));
+    }
+  }
+  Mqtt::publishComponentDiscovery();
+  HttpUtils::sendSuccessResponse(req, "insert");
+  return ESP_OK;
+}
+
+esp_err_t handleCommandsUpload(httpd_req_t* req) {
+  if (req->method != HTTP_POST) {
+    HttpUtils::sendErrorResponse(req, "405 Method Not Allowed", "upload",
+                                 "POST required");
+    return ESP_OK;
+  }
+
+  if (!commandManager.initFileSystem()) {
+    HttpUtils::sendErrorResponse(req, "500 Internal Server Error", "upload",
+                                 "LittleFS init failed");
+    return ESP_OK;
+  }
+
+  const char* tmp_path = "/littlefs/commands.json.tmp";
+
+  FILE* file = std::fopen(tmp_path, "wb");
+  if (file == nullptr) {
+    HttpUtils::sendErrorResponse(req, "500 Internal Server Error", "upload",
+                                 "Failed to open temp file");
+    return ESP_OK;
+  }
+
+  char buffer[512];
+  int remaining = req->content_len;
+  int total_written = 0;
+
+  while (remaining > 0) {
+    int to_read = remaining > static_cast<int>(sizeof(buffer))
+                      ? static_cast<int>(sizeof(buffer))
+                      : remaining;
+    int received = httpd_req_recv(req, buffer, to_read);
+    if (received <= 0) {
+      std::fclose(file);
+      std::remove(tmp_path);
+      HttpUtils::sendErrorResponse(req, "500 Internal Server Error", "upload",
+                                   "Receive failed");
+      return ESP_OK;
+    }
+    int written = std::fwrite(buffer, 1, received, file);
+    if (written != received) {
+      std::fclose(file);
+      std::remove(tmp_path);
+      HttpUtils::sendErrorResponse(req, "500 Internal Server Error", "upload",
+                                   "Write failed");
+      return ESP_OK;
+    }
+    total_written += written;
+    remaining -= received;
+  }
+
+  std::fclose(file);
+
+  int64_t bytes = commandManager.loadCommandsFrom(tmp_path);
+  if (bytes < 0) {
+    std::remove(tmp_path);
+    HttpUtils::sendErrorResponse(req, "500 Internal Server Error", "upload",
+                                 "JSON parse failed");
+    return ESP_OK;
+  }
+
+  if (commandManager.saveCommands() < 0) {
+    std::remove(tmp_path);
+    HttpUtils::sendErrorResponse(req, "500 Internal Server Error", "upload",
+                                 "Save failed");
+    return ESP_OK;
+  }
+
+  std::remove(tmp_path);
+  Mqtt::publishComponentDiscovery();
+  size_t count = commandManager.getCommandCount();
+  char res_buf[128];
+  snprintf(res_buf, sizeof(res_buf), "Uploaded %d bytes, loaded %u commands",
+           total_written, (unsigned)count);
+  HttpUtils::sendSuccessResponse(req, "upload", res_buf);
   return ESP_OK;
 }
 
 esp_err_t handleCommandsRemove(httpd_req_t* req) {
-  cJSON* doc = cJSON_Parse(HttpUtils::readBody(req).c_str());
-  if (!cJSON_IsObject(doc)) {
-    HttpUtils::sendResponse(req, "403 Forbidden", "text/html", "Json invalid");
-  } else {
-    cJSON* keys = cJSON_GetObjectItemCaseSensitive(doc, "keys");
-    if (cJSON_IsArray(keys) && cJSON_GetArraySize(keys) > 0) {
-      cJSON* key = nullptr;
-      cJSON_ArrayForEach(key, keys) {
-        if (!cJSON_IsString(key) || key->valuestring == nullptr) continue;
-        const Command* cmd = store.findCommand(key->valuestring);
-        if (cmd) {
-          if (mqttha.isEnabled()) mqttha.publishComponent(cmd, true);
-          store.removeCommand(key->valuestring);
-        }
-      }
-      HttpUtils::sendResponse(req, "200 OK", "text/html", "Ok");
-    } else if (store.getActiveCommands() + store.getPassiveCommands() > 0) {
-      for (const Command* cmd : store.getCommands()) {
-        if (mqttha.isEnabled()) mqttha.publishComponent(cmd, true);
-        store.removeCommand(cmd->getKey());
-      }
-      HttpUtils::sendResponse(req, "200 OK", "text/html", "Ok");
-    } else {
-      HttpUtils::sendResponse(req, "403 Forbidden", "text/html", "No commands");
-    }
+  HttpUtils::StreamingReader sr(req);
+  if (!sr.isValid() || !sr.feedAll()) {
+    HttpUtils::sendErrorResponse(req, "400 Bad Request", "remove",
+                                 "Request body too large or invalid");
+    return ESP_OK;
   }
-  if (doc) cJSON_Delete(doc);
+  sr.endOfInput();
+
+  ebus::detail::JsonReader reader(sr.jsonReader().remaining());
+  std::string parse_error;
+  if (prepareJsonReaderForArray(reader, "keys", parse_error)) {
+    while (true) {
+      auto t = reader.next();
+      if (t == ebus::detail::JsonReader::Token::array_end ||
+          t == ebus::detail::JsonReader::Token::end)
+        break;
+      if (t == ebus::detail::JsonReader::Token::string)
+        commandManager.removeCommand(reader.value());
+    }
+  } else {
+    commandManager.removeAll();
+  }
+  HttpUtils::sendSuccessResponse(req, "remove");
   return ESP_OK;
 }
 
 esp_err_t handleCommandsLoad(httpd_req_t* req) {
-  int64_t bytes = store.loadCommands();
-  if (bytes > 0)
-    HttpUtils::sendResponse(req, "200 OK", "text/html",
-                            std::to_string(bytes) + " bytes loaded");
-  else if (bytes < 0)
-    HttpUtils::sendResponse(req, "200 OK", "text/html", "Loading failed");
-  else
-    HttpUtils::sendResponse(req, "200 OK", "text/html", "No data loaded");
-
-  if (mqttha.isEnabled()) mqttha.publishComponents();
+  int64_t bytes = commandManager.loadCommands();
+  if (bytes > 0) {
+    Mqtt::publishComponentDiscovery();
+    HttpUtils::sendSuccessResponse(
+        req, "load", "successful",
+        "Loaded " + std::to_string(bytes) + " bytes");
+  } else if (bytes < 0) {
+    HttpUtils::sendErrorResponse(req, "500 Internal Server Error", "load",
+                                 "Load failed");
+  } else {
+    HttpUtils::sendSuccessResponse(req, "load", "no data");
+  }
   return ESP_OK;
 }
 
 esp_err_t handleCommandsSave(httpd_req_t* req) {
-  int64_t bytes = store.saveCommands();
-  if (bytes > 0)
-    HttpUtils::sendResponse(req, "200 OK", "text/html",
-                            std::to_string(bytes) + " bytes saved");
-  else if (bytes < 0)
-    HttpUtils::sendResponse(req, "200 OK", "text/html", "Saving failed");
-  else
-    HttpUtils::sendResponse(req, "200 OK", "text/html", "No data saved");
+  int64_t bytes = commandManager.saveCommands();
+  if (bytes > 0) {
+    Mqtt::publishComponentDiscovery();
+    HttpUtils::sendSuccessResponse(req, "save", "successful",
+                                   "Saved " + std::to_string(bytes) + " bytes");
+  } else if (bytes < 0) {
+    HttpUtils::sendErrorResponse(req, "500 Internal Server Error", "save",
+                                 "Save failed");
+  } else {
+    HttpUtils::sendSuccessResponse(req, "save", "no data");
+  }
   return ESP_OK;
 }
 
 esp_err_t handleCommandsWipe(httpd_req_t* req) {
-  int64_t bytes = store.wipeCommands();
-  if (bytes > 0)
-    HttpUtils::sendResponse(req, "200 OK", "text/html",
-                            std::to_string(bytes) + " bytes wiped");
-  else if (bytes < 0)
-    HttpUtils::sendResponse(req, "200 OK", "text/html", "Wiping failed");
-  else
-    HttpUtils::sendResponse(req, "200 OK", "text/html", "No data wiped");
+  if (mqttha.isEnabled()) {
+    mqttha.removeComponents();
+  }
+  int64_t bytes = commandManager.wipeCommands();
+  if (bytes > 0) {
+    HttpUtils::sendSuccessResponse(req, "wipe", "successful",
+                                   "Wiped " + std::to_string(bytes) + " bytes");
+  } else if (bytes < 0) {
+    HttpUtils::sendErrorResponse(req, "500 Internal Server Error", "wipe",
+                                 "Wipe failed");
+  } else {
+    HttpUtils::sendSuccessResponse(req, "wipe", "no data");
+  }
   return ESP_OK;
 }
 
@@ -446,67 +670,81 @@ esp_err_t handleCronPage(httpd_req_t* req) {
 }
 
 esp_err_t handleCron(httpd_req_t* req) {
-  HttpUtils::sendResponse(req, "200 OK", "application/json;charset=utf-8",
-                          cron.getRulesJson());
+  httpd_resp_set_type(req, "application/json;charset=utf-8");
+  HttpUtils::applyCustomHeaders(req);
+  cron.fetchRules([req](std::string_view chunk) {
+    httpd_resp_send_chunk(req, chunk.data(), chunk.size());
+  });
+  httpd_resp_send_chunk(req, nullptr, 0);
   return ESP_OK;
 }
 
 esp_err_t handleCronEvaluate(httpd_req_t* req) {
-  cJSON* doc = cJSON_Parse(HttpUtils::readBody(req).c_str());
-  if (!cJSON_IsArray(doc)) {
-    HttpUtils::sendResponse(req, "403 Forbidden", "text/html", "Json invalid");
-  } else {
-    cJSON* rule = nullptr;
-    cJSON_ArrayForEach(rule, doc) {
-      std::string evalError = Cron::evaluate(rule);
-      if (!evalError.empty()) {
-        cJSON_Delete(doc);
-        HttpUtils::sendResponse(req, "403 Forbidden", "text/html", evalError.c_str());
-        return ESP_OK;
-      }
-    }
-    HttpUtils::sendResponse(req, "200 OK", "text/html", "Ok");
+  HttpUtils::StreamingReader sr(req);
+  if (!sr.isValid() || !sr.feedAll()) {
+    HttpUtils::sendErrorResponse(req, "400 Bad Request", "evaluate",
+                                 "Request body too large or invalid");
+    return ESP_OK;
   }
-  if (doc) cJSON_Delete(doc);
+  sr.endOfInput();
+
+  ebus::detail::JsonReader reader(sr.jsonReader().remaining());
+  std::string parse_error;
+  if (!prepareJsonReaderForArray(reader, "", parse_error)) {
+    HttpUtils::sendErrorResponse(req, "400 Bad Request", "evaluate",
+                                 parse_error);
+    return ESP_OK;
+  }
+
+  std::string evalError;
+  while (true) {
+    std::string_view rule_sv = reader.rawValue();
+    if (rule_sv.empty()) break;
+    ebus::detail::JsonReader rule_reader(rule_sv);
+    evalError = Cron::evaluate(rule_reader);
+    if (!evalError.empty()) break;
+  }
+
+  if (!evalError.empty())
+    HttpUtils::sendErrorResponse(req, "400 Bad Request", "evaluate", evalError);
+  else
+    HttpUtils::sendSuccessResponse(req, "evaluate");
+
   return ESP_OK;
 }
 
 esp_err_t handleCronSave(httpd_req_t* req) {
-  cJSON* doc = cJSON_Parse(HttpUtils::readBody(req).c_str());
-  if (!cJSON_IsArray(doc)) {
-    HttpUtils::sendResponse(req, "403 Forbidden", "text/html", "Json invalid");
-  } else {
-    cJSON* rule = nullptr;
-    cJSON_ArrayForEach(rule, doc) {
-      std::string evalError = Cron::evaluate(rule);
-      if (!evalError.empty()) {
-        cJSON_Delete(doc);
-        HttpUtils::sendResponse(req, "403 Forbidden", "text/html", evalError.c_str());
-        return ESP_OK;
-      }
-    }
-    int64_t bytes = cron.replaceRules(doc);
-    if (bytes >= 0) {
-      HttpUtils::sendResponse(req, "200 OK", "text/html",
-                              std::to_string(bytes) + " bytes saved");
-    } else {
-      HttpUtils::sendResponse(req, "500 Internal Server Error", "text/html",
-                              "Saving failed");
-    }
+  HttpUtils::StreamingReader sr(req);
+  if (!sr.isValid() || !sr.feedAll()) {
+    HttpUtils::sendErrorResponse(req, "500 Internal Server Error", "save",
+                                 "Receive failed");
+    return ESP_OK;
   }
-  if (doc) cJSON_Delete(doc);
+  sr.endOfInput();
+  int64_t bytes = cron.replaceRules(sr.jsonReader().remaining());
+  if (bytes >= 0) {
+    HttpUtils::sendSuccessResponse(
+        req, "save", "successful",
+        bytes > 0 ? "Saved " + std::to_string(bytes) + " bytes" : "");
+  } else {
+    HttpUtils::sendErrorResponse(req, "500 Internal Server Error", "save",
+                                 "Save failed");
+  }
   return ESP_OK;
 }
 
 esp_err_t handleCronLoad(httpd_req_t* req) {
   int64_t bytes = cron.loadRules();
-  if (bytes > 0)
-    HttpUtils::sendResponse(req, "200 OK", "text/html",
-                            std::to_string(bytes) + " bytes loaded");
-  else if (bytes < 0)
-    HttpUtils::sendResponse(req, "200 OK", "text/html", "Loading failed");
-  else
-    HttpUtils::sendResponse(req, "200 OK", "text/html", "No data loaded");
+  if (bytes > 0) {
+    HttpUtils::sendSuccessResponse(
+        req, "load", "successful",
+        "Loaded " + std::to_string(bytes) + " bytes");
+  } else if (bytes < 0) {
+    HttpUtils::sendErrorResponse(req, "500 Internal Server Error", "load",
+                                 "Load failed");
+  } else {
+    HttpUtils::sendSuccessResponse(req, "load", "no data");
+  }
   return ESP_OK;
 }
 
@@ -516,85 +754,84 @@ esp_err_t handleValuesPage(httpd_req_t* req) {
 }
 
 esp_err_t handleValues(httpd_req_t* req) {
-  HttpUtils::sendResponse(req, "200 OK", "application/json;charset=utf-8",
-                          store.getValuesJson());
+  httpd_resp_set_type(req, "application/json;charset=utf-8");
+  HttpUtils::applyCustomHeaders(req);
+  commandManager.fetchValues([req](std::string_view chunk) {
+    httpd_resp_send_chunk(req, chunk.data(), chunk.size());
+  });
+  httpd_resp_send_chunk(req, nullptr, 0);
   return ESP_OK;
 }
 
 esp_err_t handleValuesWrite(httpd_req_t* req) {
-  cJSON* doc = cJSON_Parse(HttpUtils::readBody(req).c_str());
-  if (!cJSON_IsObject(doc)) {
-    HttpUtils::sendResponse(req, "403 Forbidden", "text/html", "Json invalid");
-  } else {
-    cJSON* keyNode = cJSON_GetObjectItemCaseSensitive(doc, "key");
-    std::string key =
-        (cJSON_IsString(keyNode) && keyNode->valuestring != nullptr)
-            ? keyNode->valuestring
-            : "";
-    Command* command = store.findCommand(key);
-    if (command != nullptr) {
-      std::vector<uint8_t> valueBytes = command->getVectorFromJson(doc);
-      if (!valueBytes.empty()) {
-        std::vector<uint8_t> writeCmd = command->getWriteCmd();
-        writeCmd.insert(writeCmd.end(), valueBytes.begin(), valueBytes.end());
-        schedule.handleWrite(writeCmd);
-        HttpUtils::sendResponse(req, "200 OK", "text/html", "Ok");
-      } else {
-        HttpUtils::sendResponse(
-            req, "403 Forbidden", "text/html",
-            std::string("Invalid value for key '") + key + "'");
-      }
-    } else {
-      HttpUtils::sendResponse(
-          req, "403 Forbidden", "text/html",
-          std::string("Key '") + key + "' not found");
-    }
+  HttpUtils::StreamingReader sr(req);
+  if (!sr.isValid() || !sr.feedAll()) {
+    HttpUtils::sendErrorResponse(req, "400 Bad Request", "write",
+                                 "Request body too large or invalid");
+    return ESP_OK;
   }
-  if (doc) cJSON_Delete(doc);
+  sr.endOfInput();
+
+  std::string_view body_sv = sr.jsonReader().remaining();
+  ebus::detail::JsonReader reader(body_sv);
+  std::string key;
+  if (reader.findKey("key") &&
+      reader.next() == ebus::detail::JsonReader::Token::string) {
+    key = std::string(reader.value());
+  }
+
+  Command* command = commandManager.findCommand(key);
+  if (command == nullptr) {
+    HttpUtils::sendErrorResponse(req, "404 Not Found", "write",
+                                 "Key '" + key + "' not found");
+    return ESP_OK;
+  }
+
+  ebus::Sequence valueBytes = command->getVectorFromJson(body_sv);
+  if (!valueBytes.empty()) {
+    ebus::Sequence fullWrite =
+        ebus::makeSequence(command->getWriteCmd(commandManager));
+    fullWrite.append(valueBytes);
+    getEbusController().enqueue(prio_send, fullWrite);
+    command->setLast(0);
+    HttpUtils::sendSuccessResponse(req, "write");
+  } else {
+    HttpUtils::sendErrorResponse(req, "400 Bad Request", "write",
+                                 "Invalid value for key '" + key + "'");
+  }
   return ESP_OK;
 }
 
 esp_err_t handleValuesRead(httpd_req_t* req) {
-  cJSON* doc = cJSON_Parse(HttpUtils::readBody(req).c_str());
-  if (!cJSON_IsObject(doc)) {
-    cJSON* errDoc = cJSON_CreateObject();
-    cJSON_AddStringToObject(errDoc, "id", "read");
-    cJSON_AddStringToObject(errDoc, "status", "invalid json payload");
-    char* printed = cJSON_PrintUnformatted(errDoc);
-    std::string payload = printed != nullptr ? printed : "{}";
-    if (printed != nullptr) cJSON_free(printed);
-    cJSON_Delete(errDoc);
-    HttpUtils::sendResponse(req, "200 OK", "application/json;charset=utf-8", payload.c_str());
-  } else {
-    cJSON* keyNode = cJSON_GetObjectItemCaseSensitive(doc, "key");
-    std::string key =
-        (cJSON_IsString(keyNode) && keyNode->valuestring != nullptr)
-            ? keyNode->valuestring
-            : "";
-    Command* command = store.findCommand(key);
-    if (command != nullptr) {
-      command->setLast(0);
-      cJSON* resp = cJSON_CreateObject();
-      cJSON_AddStringToObject(resp, "id", "read");
-      cJSON_AddStringToObject(resp, "status", "requested");
-      char* printed = cJSON_PrintUnformatted(resp);
-      std::string payload = printed != nullptr ? printed : "{}";
-      if (printed != nullptr) cJSON_free(printed);
-      cJSON_Delete(resp);
-      HttpUtils::sendResponse(req, "200 OK", "application/json;charset=utf-8", payload.c_str());
-    } else {
-      cJSON* errDoc = cJSON_CreateObject();
-      cJSON_AddStringToObject(errDoc, "id", "read");
-      cJSON_AddStringToObject(errDoc, "status",
-                              (std::string("Key '") + key + "' not found").c_str());
-      char* printed = cJSON_PrintUnformatted(errDoc);
-      std::string payload = printed != nullptr ? printed : "{}";
-      if (printed != nullptr) cJSON_free(printed);
-      cJSON_Delete(errDoc);
-      HttpUtils::sendResponse(req, "200 OK", "application/json;charset=utf-8", payload.c_str());
-    }
+  HttpUtils::StreamingReader sr(req);
+  if (!sr.isValid() || !sr.feedAll()) {
+    HttpUtils::sendErrorResponse(req, "400 Bad Request", "read",
+                                 "Request body too large or invalid");
+    return ESP_OK;
   }
-  if (doc) cJSON_Delete(doc);
+  sr.endOfInput();
+
+  ebus::detail::JsonReader reader(sr.jsonReader().remaining());
+  std::string key;
+  if (reader.findKey("key") &&
+      reader.next() == ebus::detail::JsonReader::Token::string) {
+    key = std::string(reader.value());
+  }
+
+  if (key.empty()) {
+    HttpUtils::sendErrorResponse(req, "400 Bad Request", "read",
+                                 "invalid json payload");
+    return ESP_OK;
+  }
+
+  Command* command = commandManager.findCommand(key);
+  if (command != nullptr) {
+    command->setLast(0);
+    HttpUtils::sendSuccessResponse(req, "read", "requested");
+  } else {
+    HttpUtils::sendErrorResponse(req, "404 Not Found", "read",
+                                 "Key '" + key + "' not found");
+  }
   return ESP_OK;
 }
 
@@ -604,51 +841,45 @@ esp_err_t handleDevicesPage(httpd_req_t* req) {
 }
 
 esp_err_t handleDevices(httpd_req_t* req) {
-  HttpUtils::sendResponse(req, "200 OK", "application/json;charset=utf-8",
-                          deviceManager.getDevicesJson());
+  httpd_resp_set_type(req, "application/json;charset=utf-8");
+  HttpUtils::applyCustomHeaders(req);
+  getEbusController().fetchDevices([req](std::string_view chunk) {
+    httpd_resp_send_chunk(req, chunk.data(), chunk.size());
+  });
+  httpd_resp_send_chunk(req, nullptr, 0);
   return ESP_OK;
 }
 
 esp_err_t handleDevicesScan(httpd_req_t* req) {
-  schedule.handleScan();
-  HttpUtils::sendResponse(req, "200 OK", "text/html", "Scan initiated");
+  getEbusController().scanObservedDevices();
+  HttpUtils::sendSuccessResponse(req, "scan", "initiated");
   return ESP_OK;
 }
 
 esp_err_t handleDevicesScanFull(httpd_req_t* req) {
-  schedule.handleScanFull();
-  HttpUtils::sendResponse(req, "200 OK", "text/html", "Full scan initiated");
+  getEbusController().initFullScan(true);
+  HttpUtils::sendSuccessResponse(req, "scan_full", "initiated");
   return ESP_OK;
 }
 
-esp_err_t handleDevicesScanVendor(httpd_req_t* req) {
-  schedule.handleScanVendor();
-  HttpUtils::sendResponse(req, "200 OK", "text/html", "Vendor scan initiated");
+esp_err_t handleMetricsPage(httpd_req_t* req) {
+  sendStatic(req, "text/html", metrics_html_start);
   return ESP_OK;
 }
 
-esp_err_t handleStatisticsPage(httpd_req_t* req) {
-  sendStatic(req, "text/html", statistics_html_start);
+esp_err_t handleMetrics(httpd_req_t* req) {
+  httpd_resp_set_type(req, "application/json;charset=utf-8");
+  HttpUtils::applyCustomHeaders(req);
+  getEbusController().fetchMetrics([req](std::string_view chunk) {
+    httpd_resp_send_chunk(req, chunk.data(), chunk.size());
+  });
+  httpd_resp_send_chunk(req, nullptr, 0);
   return ESP_OK;
 }
 
-esp_err_t handleStatisticsCounter(httpd_req_t* req) {
-  HttpUtils::sendResponse(req, "200 OK", "application/json;charset=utf-8",
-                          schedule.getCounterJson());
-  return ESP_OK;
-}
-
-esp_err_t handleStatisticsTiming(httpd_req_t* req) {
-  HttpUtils::sendResponse(req, "200 OK", "application/json;charset=utf-8",
-                          schedule.getTimingJson());
-  return ESP_OK;
-}
-
-esp_err_t handleStatisticsReset(httpd_req_t* req) {
-  deviceManager.resetAddresses();
-  schedule.resetCounter();
-  schedule.resetTiming();
-  HttpUtils::sendResponse(req, "200 OK", "text/html", "Statistics reset");
+esp_err_t handleMetricsReset(httpd_req_t* req) {
+  getEbusController().resetMetrics();
+  HttpUtils::sendSuccessResponse(req, "reset");
   return ESP_OK;
 }
 
@@ -659,35 +890,50 @@ esp_err_t handleLogsPage(httpd_req_t* req) {
 
 esp_err_t handleLogs(httpd_req_t* req) {
   uint64_t sinceMillis = 0;
-
   const size_t queryLen = httpd_req_get_url_query_len(req);
   if (queryLen > 0) {
-    std::vector<char> query(queryLen + 1, '\0');
-    if (httpd_req_get_url_query_str(req, query.data(), query.size()) == ESP_OK) {
-      char sinceBuffer[32] = {'\0'};
-      if (httpd_query_key_value(query.data(), "since", sinceBuffer,
+    char queryBuf[256];
+    if (queryLen + 1 > sizeof(queryBuf)) {
+      httpd_resp_send_err(req, HTTPD_414_URI_TOO_LONG, nullptr);
+      return ESP_OK;
+    }
+    if (httpd_req_get_url_query_str(req, queryBuf, sizeof(queryBuf)) ==
+        ESP_OK) {
+      char sinceBuffer[32] = {0};
+      if (httpd_query_key_value(queryBuf, "since", sinceBuffer,
                                 sizeof(sinceBuffer)) == ESP_OK) {
-        char* end = nullptr;
-        const unsigned long long parsed =
-            std::strtoull(sinceBuffer, &end, 10);
-        if (end != sinceBuffer && *end == '\0') {
-          sinceMillis = static_cast<uint64_t>(parsed);
-        }
+        sinceMillis = std::strtoull(sinceBuffer, nullptr, 10);
       }
     }
   }
-
-  HttpUtils::sendResponse(req, "200 OK", "application/json;charset=utf-8",
-                          logger.getLogs(sinceMillis));
+  httpd_resp_set_type(req, "application/json;charset=utf-8");
+  HttpUtils::applyCustomHeaders(req);
+  logger.fetchLogs(
+      [req](std::string_view chunk) {
+        httpd_resp_send_chunk(req, chunk.data(), chunk.size());
+      },
+      sinceMillis);
+  httpd_resp_send_chunk(req, nullptr, 0);
   return ESP_OK;
 }
 
 esp_err_t handleLogsTimeRelation(httpd_req_t* req) {
-  HttpUtils::sendResponse(req, "200 OK", "application/json;charset=utf-8",
-                          logger.getTimeRelation());
+  httpd_resp_set_type(req, "application/json;charset=utf-8");
+  HttpUtils::applyCustomHeaders(req);
+  logger.fetchTimeRelation([req](std::string_view chunk) {
+    httpd_resp_send_chunk(req, chunk.data(), chunk.size());
+  });
+  httpd_resp_send_chunk(req, nullptr, 0);
   return ESP_OK;
 }
 #endif
+
+esp_err_t handleRestart(httpd_req_t* req) {
+  HttpUtils::sendResponse(req, "200 OK", "text/html", "Restarting...");
+  vTaskDelay(pdMS_TO_TICKS(500));
+  restart();
+  return ESP_OK;
+}
 
 esp_err_t handleNotFound(httpd_req_t* req) {
   if (!WifiNetworkManager::isStaConnected() &&
@@ -695,6 +941,7 @@ esp_err_t handleNotFound(httpd_req_t* req) {
     httpd_resp_set_status(req, "302 Found");
     httpd_resp_set_type(req, "text/plain");
     httpd_resp_set_hdr(req, "Location", "/config");
+    HttpUtils::applyCustomHeaders(req);
     httpd_resp_send(req, "", 0);
     return ESP_OK;
   }
@@ -702,7 +949,6 @@ esp_err_t handleNotFound(httpd_req_t* req) {
   HttpUtils::sendResponse(req, "404 Not Found", "text/plain", "Not found");
   return ESP_OK;
 }
-
 }  // namespace
 
 httpd_handle_t GetHttpServer() { return configServer; }
@@ -710,7 +956,8 @@ httpd_handle_t GetHttpServer() { return configServer; }
 bool RegisterUri(const char* uri, httpd_method_t method,
                  esp_err_t (*handler)(httpd_req_t*)) {
   if (configServer == nullptr) {
-    logger.error(std::string("HTTP server not started; cannot register ") + uri);
+    logger.error(std::string("HTTP server not started; cannot register ") +
+                 uri);
     return false;
   }
   return HttpUtils::registerRoute(configServer, uri, method, handler);
@@ -723,7 +970,11 @@ void SetupHttpHandlers() {
   config.server_port = 80;
   config.uri_match_fn = httpd_uri_match_wildcard;
   config.max_uri_handlers = 64;
-  config.stack_size = 16384;
+  config.stack_size = 8192;
+  config.lru_purge_enable = true;
+  config.max_open_sockets = 2;
+  config.recv_wait_timeout = 10;
+  config.send_wait_timeout = 10;
 
   if (httpd_start(&configServer, &config) != ESP_OK) {
     logger.error("Failed to start HTTP server");
@@ -734,21 +985,28 @@ void SetupHttpHandlers() {
   RegisterUri("/common.js", HTTP_GET, handleCommonJs);
   RegisterUri("/", HTTP_GET, handleRoot);
   RegisterUri("/config", HTTP_GET, handleConfigPage);
+  RegisterUri("/upgrade", HTTP_GET, handleUpgradePage);
+
   RegisterUri("/status", HTTP_GET, handleStatusPage);
+  RegisterUri("/api/v1/status", HTTP_GET, handleStatus);
+#if defined(EBUS_INTERNAL)
+  RegisterUri("/api/v1/status/app", HTTP_GET, handleStatusApp);
+  RegisterUri("/api/v1/status/lib", HTTP_GET, handleStatusLib);
+#endif
+
   RegisterUri("/adc", HTTP_GET, handleAdcPage);
-  RegisterUri("/api/v1/status", HTTP_GET, handleStatusApi);
   RegisterUri("/api/v1/adc/raw", HTTP_GET, handleAdcRaw);
   RegisterUri("/api/v1/adc/enable", HTTP_POST, handleAdcEnable);
   RegisterUri("/api/v1/adc/disable", HTTP_POST, handleAdcDisable);
   RegisterUri("/api/v1/adc/state", HTTP_GET, handleAdcState);
   RegisterUri("/api/v1/wifi/scan", HTTP_POST, handleWifiScan);
-  RegisterUri("/upgrade", HTTP_GET, handleUpgradePage);
 
 #if defined(EBUS_INTERNAL)
   RegisterUri("/commands", HTTP_GET, handleCommandsPage);
   RegisterUri("/api/v1/commands", HTTP_GET, handleCommands);
   RegisterUri("/api/v1/commands/evaluate", HTTP_POST, handleCommandsEvaluate);
   RegisterUri("/api/v1/commands/insert", HTTP_POST, handleCommandsInsert);
+  RegisterUri("/api/v1/commands/upload", HTTP_POST, handleCommandsUpload);
   RegisterUri("/api/v1/commands/remove", HTTP_POST, handleCommandsRemove);
   RegisterUri("/api/v1/commands/load", HTTP_POST, handleCommandsLoad);
   RegisterUri("/api/v1/commands/save", HTTP_POST, handleCommandsSave);
@@ -757,6 +1015,7 @@ void SetupHttpHandlers() {
   RegisterUri("/cron", HTTP_GET, handleCronPage);
   RegisterUri("/api/v1/cron", HTTP_GET, handleCron);
   RegisterUri("/api/v1/cron", HTTP_POST, handleCronSave);
+  RegisterUri("/api/v1/cron/load", HTTP_POST, handleCronLoad);
   RegisterUri("/api/v1/cron/evaluate", HTTP_POST, handleCronEvaluate);
 
   RegisterUri("/values", HTTP_GET, handleValuesPage);
@@ -768,12 +1027,10 @@ void SetupHttpHandlers() {
   RegisterUri("/api/v1/devices", HTTP_GET, handleDevices);
   RegisterUri("/api/v1/devices/scan", HTTP_POST, handleDevicesScan);
   RegisterUri("/api/v1/devices/scan/full", HTTP_POST, handleDevicesScanFull);
-  RegisterUri("/api/v1/devices/scan/vendor", HTTP_POST, handleDevicesScanVendor);
 
-  RegisterUri("/statistics", HTTP_GET, handleStatisticsPage);
-  RegisterUri("/api/v1/statistics/counter", HTTP_GET, handleStatisticsCounter);
-  RegisterUri("/api/v1/statistics/timing", HTTP_GET, handleStatisticsTiming);
-  RegisterUri("/api/v1/statistics/reset", HTTP_POST, handleStatisticsReset);
+  RegisterUri("/metrics", HTTP_GET, handleMetricsPage);
+  RegisterUri("/api/v1/metrics", HTTP_GET, handleMetrics);
+  RegisterUri("/api/v1/metrics/reset", HTTP_POST, handleMetricsReset);
 
   RegisterUri("/logs", HTTP_GET, handleLogsPage);
   RegisterUri("/api/v1/logs", HTTP_GET, handleLogs);
@@ -781,7 +1038,7 @@ void SetupHttpHandlers() {
 #endif
 
   RegisterUri("/restart", HTTP_GET, handleRestart);
-}
+}  // namespace
 
 void SetupHttpFallbackHandlers() {
   if (configServer == nullptr || fallbackHandlersRegistered) return;
