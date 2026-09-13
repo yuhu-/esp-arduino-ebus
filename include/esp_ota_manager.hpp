@@ -32,3 +32,5 @@ class EspOtaManager {
   char packet_[192] = {0};
   TaskHandle_t task_handle_ = nullptr;
 };
+
+extern EspOtaManager espOtaManager;

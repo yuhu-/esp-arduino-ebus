@@ -15,6 +15,7 @@
 #include "logger.hpp"
 #include "main.hpp"
 #include "mqtt_ha.hpp"
+#include "system/device_status.hpp"
 
 Mqtt mqtt;
 
@@ -332,9 +333,10 @@ void Mqtt::taskFunc(void* arg) {
             break;
 
           case 1:
-            self->publishStream(
-                "resources/app", 0, false,
-                [](const ebus::JsonChunkVisitor& v) { fetchAppStatus(v); });
+            self->publishStream("resources/app", 0, false,
+                                [](const ebus::JsonChunkVisitor& v) {
+                                  DeviceStatus::fetchAppStatus(v);
+                                });
             tele_phase = 2;
             break;
 

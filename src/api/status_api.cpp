@@ -3,7 +3,7 @@
 #include "ebus_accessor.hpp"
 #include "http.hpp"
 #include "http_utils.hpp"
-#include "main.hpp"
+#include "system/device_status.hpp"
 
 namespace {
 
@@ -38,7 +38,7 @@ esp_err_t StatusApi::handleStatusPage(httpd_req_t* req) {
 esp_err_t StatusApi::handleStatus(httpd_req_t* req) {
   httpd_resp_set_type(req, "application/json;charset=utf-8");
   HttpUtils::applyCustomHeaders(req);
-  fetchStatus([req](std::string_view chunk) {
+  DeviceStatus::fetchStatus([req](std::string_view chunk) {
     httpd_resp_send_chunk(req, chunk.data(), chunk.size());
   });
   httpd_resp_send_chunk(req, nullptr, 0);
@@ -49,7 +49,7 @@ esp_err_t StatusApi::handleStatus(httpd_req_t* req) {
 esp_err_t StatusApi::handleStatusApp(httpd_req_t* req) {
   httpd_resp_set_type(req, "application/json;charset=utf-8");
   HttpUtils::applyCustomHeaders(req);
-  fetchAppStatus([req](std::string_view chunk) {
+  DeviceStatus::fetchAppStatus([req](std::string_view chunk) {
     httpd_resp_send_chunk(req, chunk.data(), chunk.size());
   });
   httpd_resp_send_chunk(req, nullptr, 0);

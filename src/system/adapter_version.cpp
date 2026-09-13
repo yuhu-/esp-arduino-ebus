@@ -1,4 +1,4 @@
-#include "adapter_version.hpp"
+#include "system/adapter_version.hpp"
 
 #include <esp_efuse.h>
 

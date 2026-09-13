@@ -79,6 +79,7 @@ void AppConfig::toJson(ebus::detail::JsonWriter& writer) const {
 
 AppConfig AppConfig::fromJson(std::string_view json) {
   AppConfig cfg;
+  cfg.reset();
   cfg.mergeFromJson(json);
   return cfg;
 }
