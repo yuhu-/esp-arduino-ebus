@@ -1,4 +1,4 @@
-#include "config_manager.hpp"
+#include "config/config_manager.hpp"
 
 #include <esp_err.h>
 #include <nvs.h>

@@ -20,7 +20,7 @@
 #include <string>
 
 #include "app/app_limits.hpp"
-#include "config_manager.hpp"
+#include "config/config_manager.hpp"
 #include "logger.hpp"
 
 ConfigManager* WifiNetworkManager::configManager_ = nullptr;

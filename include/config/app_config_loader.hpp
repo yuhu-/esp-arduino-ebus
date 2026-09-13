@@ -3,7 +3,7 @@
 #include <string>
 
 #include "config/app_config.hpp"
-#include "config_manager.hpp"
+#include "config/config_manager.hpp"
 
 class AppConfigLoader {
  public:

@@ -5,7 +5,6 @@
 #include <esp_heap_caps.h>
 #include <esp_idf_version.h>
 #include <esp_private/esp_clk.h>
-#include <esp_sntp.h>
 #include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -21,6 +20,7 @@
 #include "mqtt.hpp"
 #include "mqtt_ha.hpp"
 #include "network/captive_dns.hpp"
+#include "network/sntp.hpp"
 #include "system/adapter_version.hpp"
 #include "system/device_identity.hpp"
 #include "system_monitor.hpp"
@@ -156,20 +156,6 @@ struct WifiStatus {
 };
 
 #if defined(EBUS_INTERNAL)
-struct SntpStatus {
-  static void toJson(ebus::detail::JsonWriter& writer) {
-    auto scope = writer.objectScope();
-    writer.writeField("enabled", statusConfig().sntp.enabled);
-    const char* activeSntpServer = esp_sntp_getservername(0);
-    if (activeSntpServer != nullptr) {
-      writer.writeField("server", activeSntpServer);
-    } else {
-      writer.writeField("server", statusConfig().sntp.server.c_str());
-    }
-    writer.writeField("timezone", statusConfig().sntp.timezone.c_str());
-  }
-};
-
 struct EbusStatus {
   static void toJson(ebus::detail::JsonWriter& w) {
     auto obj_scope = w.objectScope();
@@ -247,7 +233,10 @@ void DeviceStatus::fetchStatus(const ebus::JsonChunkVisitor& visitor) {
   writer.writeField("wifi", WifiStatus{});
 
 #if defined(EBUS_INTERNAL)
-  writer.writeField("sntp", SntpStatus{});
+  {
+    auto sntp_scope = writer.objectScope("sntp");
+    appendSntpStatus(writer, statusConfig().sntp);
+  }
   writer.writeField("ebus", EbusStatus{});
   writer.writeField("schedule", ScheduleStatus{});
   writer.writeField("mqtt", MqttStatus{});

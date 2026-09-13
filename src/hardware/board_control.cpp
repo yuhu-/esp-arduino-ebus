@@ -4,7 +4,7 @@
 #include <esp_system.h>
 #include <esp_timer.h>
 
-#include "config_manager.hpp"
+#include "config/config_manager.hpp"
 
 // minimum time of reset pin
 #define RESET_MS 1000

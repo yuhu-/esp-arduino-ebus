@@ -1,6 +1,6 @@
 #include "config/app_config_loader.hpp"
 
-#include "config_manager.hpp"
+#include "config/config_manager.hpp"
 
 namespace {
 

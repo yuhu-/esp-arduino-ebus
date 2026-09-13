@@ -6,7 +6,7 @@
 #include <cstdlib>
 
 #include "config/app_config_loader.hpp"
-#include "config_manager.hpp"
+#include "config/config_manager.hpp"
 #include "esp_ota_manager.hpp"
 #include "hardware/board_control.hpp"
 #include "hardware/pwm.hpp"

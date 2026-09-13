@@ -58,4 +58,16 @@ void setTimezone(const AppConfig::Sntp& sntp) {
   }
 }
 
+void appendSntpStatus(ebus::detail::JsonWriter& writer,
+                      const AppConfig::Sntp& sntp) {
+  writer.writeField("enabled", sntp.enabled);
+  const char* activeSntpServer = esp_sntp_getservername(0);
+  if (activeSntpServer != nullptr) {
+    writer.writeField("server", activeSntpServer);
+  } else {
+    writer.writeField("server", sntp.server.c_str());
+  }
+  writer.writeField("timezone", sntp.timezone.c_str());
+}
+
 #endif

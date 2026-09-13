@@ -8,7 +8,7 @@
 #include <string_view>
 
 #include "app/app.hpp"
-#include "config_manager.hpp"
+#include "config/config_manager.hpp"
 #include "esp_ota_manager.hpp"
 #include "logger.hpp"
 #include "system/device_status.hpp"
