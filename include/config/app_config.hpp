@@ -1,9 +1,9 @@
 #pragma once
 
 #include <cstdint>
-#include <ebus/detail/json_writer.hpp>
 #include <ebus/types.hpp>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -60,23 +60,6 @@ struct AppConfig {
 
   void reset();
 
-  void toJson(ebus::detail::JsonWriter& writer) const;
-
-  /**
-   * @brief Deserializes a JSON string into an AppConfig object.
-   * @param json The JSON string to parse.
-   * @return A populated AppConfig object. Defaults are used for missing keys.
-   */
-  static AppConfig fromJson(std::string_view json);
-
-  /**
-   * @brief Merges a partial JSON string into the current configuration.
-   * Only keys present in the JSON are updated; others remain unchanged.
-   * Unknown keys are safely ignored.
-   * @return true if the JSON was partially or fully parsed, false on error.
-   */
-  bool mergeFromJson(std::string_view json);
-
   /**
    * @brief Merges a flat NVS-key JSON object (as posted by /api/v1/config)
    * into the current configuration. Keys use NVS names (e.g. "wifiSsid",
@@ -93,10 +76,4 @@ struct AppConfig {
 
   /** @brief True if the key is a known flat NVS config key. */
   static bool isKnownFlatKey(std::string_view key);
-
-  /**
-   * @brief Performs a basic structural validation of a JSON string.
-   * @return true if the string appears to be valid JSON, false otherwise.
-   */
-  static bool isValidJson(std::string_view json);
 };
