@@ -1,5 +1,8 @@
 #pragma once
 
+#include <string>
+#include <string_view>
+
 #include "config/app_config.hpp"
 
 class ConfigManager;
@@ -7,6 +10,10 @@ class ConfigManager;
 class App {
  public:
   explicit App(ConfigManager& config_manager);
+
+  // Single instance registry (mirrors StatusApi/StringPool): exactly one App
+  // exists on the main task. Lets static HTTP handlers reach the live App.
+  static App* instance();
 
   bool begin();
   // Main supervision loop. Never returns: the main task owns this App
@@ -19,9 +26,18 @@ class App {
   // ConfigManager::begin() first. Returns loader result.
   bool loadConfig();
 
+  // Applies a flat NVS-key JSON object (as posted by /api/v1/config) onto a
+  // copy of the snapshot, validates it and persists via
+  // AppConfigLoader::save(). Unknown keys are stored to NVS directly,
+  // preserving the legacy writeConfigJson behavior. The live snapshot is
+  // intentionally left untouched: the UI contract is restart-to-apply.
+  bool applyFlatConfigJson(std::string_view body, std::string& error);
+
   const AppConfig& config() const { return config_; }
 
  private:
+  static App* instance_;
+
   ConfigManager& config_manager_;
   AppConfig config_;
 };

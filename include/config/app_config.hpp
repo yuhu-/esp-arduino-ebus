@@ -3,6 +3,9 @@
 #include <cstdint>
 #include <ebus/detail/json_writer.hpp>
 #include <ebus/types.hpp>
+#include <string>
+#include <utility>
+#include <vector>
 
 struct AppConfig {
   struct Network {
@@ -73,6 +76,23 @@ struct AppConfig {
    * @return true if the JSON was partially or fully parsed, false on error.
    */
   bool mergeFromJson(std::string_view json);
+
+  /**
+   * @brief Merges a flat NVS-key JSON object (as posted by /api/v1/config)
+   * into the current configuration. Keys use NVS names (e.g. "wifiSsid",
+   * "pwmValue"); all values arrive as strings, matching the previous
+   * ConfigManager::writeConfigJson contract. Non-string values are rejected.
+   * Unparseable int values leave the current field unchanged.
+   * Unknown keys are optionally collected for NVS passthrough storage.
+   * @param unknowns Optional out-vector receiving unknown key/value pairs.
+   * @return true if the JSON was an object and all values were strings.
+   */
+  bool mergeFlatJson(
+      std::string_view json,
+      std::vector<std::pair<std::string, std::string>>* unknowns = nullptr);
+
+  /** @brief True if the key is a known flat NVS config key. */
+  static bool isKnownFlatKey(std::string_view key);
 
   /**
    * @brief Performs a basic structural validation of a JSON string.

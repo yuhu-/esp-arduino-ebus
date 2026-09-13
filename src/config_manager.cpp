@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "app/app.hpp"
 #include "http.hpp"
 #include "http_utils.hpp"
 
@@ -364,7 +365,14 @@ esp_err_t ConfigManager::handleSet(httpd_req_t* req) {
   }
   sr.endOfInput();
   std::string error;
-  bool success = writeConfigJson(sr.jsonReader().remaining(), error);
+  bool success = false;
+  if (App::instance() != nullptr) {
+    // Canonical path: validate + persist via the AppConfig snapshot.
+    success = App::instance()->applyFlatConfigJson(sr.jsonReader().remaining(),
+                                                   error);
+  } else {
+    success = writeConfigJson(sr.jsonReader().remaining(), error);
+  }
   if (success) {
     HttpUtils::sendSuccessResponse(req, "config_set", "successful",
                                    "Config saved to NVS");

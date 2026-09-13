@@ -4,6 +4,7 @@
 #include <freertos/task.h>
 
 #include "config/app_config_loader.hpp"
+#include "config/app_config_validator.hpp"
 #include "config_manager.hpp"
 
 #if defined(EBUS_INTERNAL)
@@ -15,15 +16,49 @@
 #include "legacy/client.hpp"
 #endif
 
+App* App::instance_ = nullptr;
+
 App::App(ConfigManager& config_manager) : config_manager_(config_manager) {
   config_.reset();
+  instance_ = this;
 }
+
+App* App::instance() { return instance_; }
 
 bool App::begin() { return true; }
 
 bool App::loadConfig() {
   AppConfigLoader loader(config_manager_);
   return loader.load(config_);
+}
+
+bool App::applyFlatConfigJson(std::string_view body, std::string& error) {
+  AppConfig staging = config_;
+  std::vector<std::pair<std::string, std::string>> unknowns;
+  if (!staging.mergeFlatJson(body, &unknowns)) {
+    error = "Invalid config JSON";
+    return false;
+  }
+  if (!config::AppConfigValidator::validate(staging)) {
+    error = "Config values out of range";
+    return false;
+  }
+  AppConfigLoader loader(config_manager_);
+  if (!loader.save(staging)) {
+    error = "Failed to write NVS";
+    return false;
+  }
+  // Preserve legacy behavior: unknown keys are stored to NVS directly.
+  for (const auto& kv : unknowns) {
+    if (!config_manager_.writeString(kv.first.c_str(), kv.second)) {
+      error = "Failed to write NVS";
+      return false;
+    }
+  }
+  // No live swap: the UI contract is restart-to-apply, so the snapshot keeps
+  // boot values (matching the running services) until the next reboot loads
+  // the saved state.
+  return true;
 }
 
 void App::loop() {
