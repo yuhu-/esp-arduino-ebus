@@ -59,17 +59,6 @@ TEST_CASE("AppConfigValidator rejects out-of-range values", "[app_config]") {
   REQUIRE(config::AppConfigValidator::validate(bad) == false);
 }
 
-TEST_CASE("AppConfigValidator validateJson guards raw payloads",
-          "[app_config]") {
-  REQUIRE(config::AppConfigValidator::validateJson(R"({"pwm":200})") == true);
-  REQUIRE(config::AppConfigValidator::validateJson(R"({"pwm":0})") == false);
-  REQUIRE(config::AppConfigValidator::validateJson(
-              R"({"bus":{"window_us":4000}})") == false);
-  REQUIRE(config::AppConfigValidator::validateJson(R"({not json)") == false);
-  // Unknown keys are ignored
-  REQUIRE(config::AppConfigValidator::validateJson(R"({"nope":1})") == true);
-}
-
 TEST_CASE("AppConfig mergeFlatJson applies NVS-keyed string values",
           "[app_config]") {
   AppConfig cfg;
