@@ -38,6 +38,15 @@ class App {
  private:
   static App* instance_;
 
+  // Init phases, executed in order by begin(). Each phase owns one slice of
+  // the former app_main inline sequence; begin() short-circuits on failure.
+  bool initPlatform();
+  bool initConfig();
+  bool initNetwork();
+  bool initServices();
+  bool initHttp();
+  bool startTasks();
+
   ConfigManager& config_manager_;
   AppConfig config_;
 };

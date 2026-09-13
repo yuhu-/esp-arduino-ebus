@@ -21,7 +21,6 @@ set(APP_SOURCES
     ${PROJECT_ROOT}/src/command.cpp
     ${PROJECT_ROOT}/src/command_manager.cpp
     ${PROJECT_ROOT}/src/config/app_config.cpp
-    ${PROJECT_ROOT}/src/config/app_config_validator.cpp
     ${PROJECT_ROOT}/src/data_profile.cpp
     ${PROJECT_ROOT}/src/ha_profile.cpp
     ${PROJECT_ROOT}/src/string_pool.cpp

@@ -60,6 +60,9 @@ struct AppConfig {
 
   void reset();
 
+  /** @brief Validates field values against protocol limits. */
+  bool isValid() const;
+
   /**
    * @brief Merges a flat NVS-key JSON object (as posted by /api/v1/config)
    * into the current configuration. Keys use NVS names (e.g. "wifiSsid",

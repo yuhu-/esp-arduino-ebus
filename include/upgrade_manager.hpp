@@ -35,3 +35,5 @@ class UpgradeManager {
   size_t upload_bytes_received_ = 0;
   int upload_next_progress_percent_ = 10;
 };
+
+extern UpgradeManager upgradeManager;

@@ -2,7 +2,6 @@
 #include <string>
 
 #include "config/app_config.hpp"
-#include "config/app_config_validator.hpp"
 
 TEST_CASE("AppConfig reset provides migration-safe defaults", "[app_config]") {
   AppConfig cfg;
@@ -21,42 +20,42 @@ TEST_CASE("AppConfig reset provides migration-safe defaults", "[app_config]") {
   REQUIRE(std::string(cfg.mqtt_ha.thing_name.c_str()) == "esp-eBus");
 
   // reset() ships test WiFi credentials, so the default snapshot validates
-  REQUIRE(config::AppConfigValidator::validate(cfg) == true);
+  REQUIRE(cfg.isValid() == true);
 }
 
-TEST_CASE("AppConfigValidator accepts a fully populated config",
+TEST_CASE("AppConfig isValid accepts a fully populated config",
           "[app_config]") {
   AppConfig cfg;
   cfg.reset();
   cfg.network.wifi_ssid.assign("my-ssid");
 
-  REQUIRE(config::AppConfigValidator::validate(cfg) == true);
+  REQUIRE(cfg.isValid() == true);
 }
 
-TEST_CASE("AppConfigValidator rejects out-of-range values", "[app_config]") {
+TEST_CASE("AppConfig isValid rejects out-of-range values", "[app_config]") {
   AppConfig cfg;
   cfg.reset();
   cfg.network.wifi_ssid.assign("my-ssid");
 
   AppConfig bad = cfg;
   bad.pwm.value = 0;
-  REQUIRE(config::AppConfigValidator::validate(bad) == false);
+  REQUIRE(bad.isValid() == false);
 
   bad = cfg;
   bad.bus.window_us = 4000;
-  REQUIRE(config::AppConfigValidator::validate(bad) == false);
+  REQUIRE(bad.isValid() == false);
 
   bad = cfg;
   bad.bus.offset_us = 500;
-  REQUIRE(config::AppConfigValidator::validate(bad) == false);
+  REQUIRE(bad.isValid() == false);
 
   bad = cfg;
   bad.bus.address.assign("");
-  REQUIRE(config::AppConfigValidator::validate(bad) == false);
+  REQUIRE(bad.isValid() == false);
 
   bad = cfg;
   bad.network.wifi_ssid.assign("");
-  REQUIRE(config::AppConfigValidator::validate(bad) == false);
+  REQUIRE(bad.isValid() == false);
 }
 
 TEST_CASE("AppConfig mergeFlatJson applies NVS-keyed string values",

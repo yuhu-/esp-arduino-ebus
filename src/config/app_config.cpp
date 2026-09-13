@@ -6,6 +6,8 @@
 #include <string>
 #include <string_view>
 
+#include "app/app_limits.hpp"
+
 void AppConfig::reset() {
   *this = AppConfig{};
   network.wifi_ssid = "ebus-test";
@@ -21,6 +23,28 @@ void AppConfig::reset() {
   bus.system_inquiry = false;
   bus.system_response = true;
   bus.scan_on_startup = false;
+}
+
+bool AppConfig::isValid() const {
+  // 1. Required network credentials
+  if (network.wifi_ssid.empty()) return false;
+
+  // 2. PWM
+  if (pwm.value < app::limits::Pwm::min || pwm.value > app::limits::Pwm::max)
+    return false;
+
+  // 3. eBUS address must be non-empty and fit the FixedString capacity.
+  if (bus.address.empty()) return false;
+
+  // 4. Bus timing
+  if (bus.window_us < app::limits::Bus::window_min_us ||
+      bus.window_us > app::limits::Bus::window_max_us)
+    return false;
+  if (bus.offset_us < app::limits::Bus::offset_min_us ||
+      bus.offset_us > app::limits::Bus::offset_max_us)
+    return false;
+
+  return true;
 }
 
 namespace {
