@@ -786,7 +786,6 @@ void Mqtt::publishResponse(std::string_view id, std::string_view status,
 
 void appendMqttStatus(ebus::detail::JsonWriter& w,
                       const AppConfig::Mqtt& mqtt_config) {
-  auto obj_scope = w.objectScope();
   w.writeField("enabled", mqtt.isEnabled());
   w.writeField("server", mqtt_config.server.c_str());
   w.writeField("user", mqtt_config.user.c_str());

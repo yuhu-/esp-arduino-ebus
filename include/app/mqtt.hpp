@@ -207,6 +207,7 @@ extern Mqtt mqtt;
 
 // Renders the "mqtt" status section. Colocated here because it reads live
 // Mqtt state; the config slice arrives as a parameter (no new DI).
+// Writes fields only: the caller opens the named object scope.
 void appendMqttStatus(ebus::detail::JsonWriter& writer,
                       const AppConfig::Mqtt& mqtt_config);
 #endif

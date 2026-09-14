@@ -75,4 +75,5 @@ class WifiNetworkManager {
 
 // Renders the "wifi" status section. Colocated here because it reads
 // exclusively live WifiNetworkManager state (no config snapshot needed).
+// Writes fields only: the caller opens the named object scope.
 void appendWifiStatus(ebus::detail::JsonWriter& writer);

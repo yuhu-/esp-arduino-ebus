@@ -525,7 +525,6 @@ void WifiNetworkManager::configureStaticIpIfEnabled() {
 }
 
 void appendWifiStatus(ebus::detail::JsonWriter& writer) {
-  auto scope = writer.objectScope();
   writer.writeField("last_connect", WifiNetworkManager::getLastConnect());
   writer.writeField("reconnect_count", WifiNetworkManager::getReconnectCount());
   writer.writeField("rssi", WifiNetworkManager::RSSI());
