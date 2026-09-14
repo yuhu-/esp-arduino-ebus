@@ -64,7 +64,7 @@ void Mqtt::stopTask() {
     // Wait for the task to actually terminate (up to 1 second total)
     // This is critical to prevent the task from accessing MQTT client
     // after it has been destroyed
-    // Note: The task will delete its own queue when it exits
+    // Note: The task resets its own static queue when it exits
     const TickType_t xDelay = pdMS_TO_TICKS(100);
     for (int i = 0; i < 10; ++i) {
       if (task_exited_) {
@@ -303,8 +303,15 @@ void Mqtt::internalPublish(const char* topic, uint8_t qos, bool retain,
 
 void Mqtt::taskFunc(void* arg) {
   Mqtt* self = static_cast<Mqtt*>(arg);
-  self->outgoing_queue_ =
-      xQueueCreate(max_outgoing_queue_size, sizeof(OutgoingAction));
+  // Static storage: no heap, survives task restarts. Re-initialized on every
+  // start so each task run gets a fresh empty queue (never vQueueDelete'd:
+  // freeing static storage would corrupt the heap).
+  static uint8_t outgoing_storage[max_outgoing_queue_size *
+                                  sizeof(OutgoingAction)];
+  static StaticQueue_t outgoing_cb;
+  self->outgoing_queue_ = xQueueCreateStatic(
+      max_outgoing_queue_size, sizeof(OutgoingAction), outgoing_storage,
+      &outgoing_cb);
 
   uint8_t tele_phase = 0;
 
@@ -427,7 +434,7 @@ void Mqtt::taskFunc(void* arg) {
   }
 
   if (self->outgoing_queue_ != nullptr) {
-    vQueueDelete(self->outgoing_queue_);
+    xQueueReset(self->outgoing_queue_);
     self->outgoing_queue_ = nullptr;
   }
   self->task_exited_ = true;
