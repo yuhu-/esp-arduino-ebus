@@ -1,5 +1,5 @@
 #if defined(EBUS_INTERNAL)
-#include "command.hpp"
+#include "app/command.hpp"
 
 #include <algorithm>
 #include <cerrno>
@@ -11,7 +11,7 @@
 #include <limits>
 #include <regex>
 
-#include "command_manager.hpp"
+#include "app/command_manager.hpp"
 #include "data_profile.hpp"
 #include "ha_profile.hpp"
 #include "logger.hpp"

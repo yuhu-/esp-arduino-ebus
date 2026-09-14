@@ -8,8 +8,8 @@
 #include <ebus/utils.hpp>
 #include <iostream>
 
-#include "command.hpp"
-#include "command_manager.hpp"
+#include "app/command.hpp"
+#include "app/command_manager.hpp"
 
 using namespace ebus::detail;
 using namespace ebus;

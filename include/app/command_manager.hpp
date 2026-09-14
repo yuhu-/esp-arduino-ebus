@@ -9,7 +9,7 @@
 #include <string_view>
 #include <vector>
 
-#include "command.hpp"
+#include "app/command.hpp"
 
 #ifndef COMMAND_CAPACITY
 inline constexpr size_t command_capacity = 64;

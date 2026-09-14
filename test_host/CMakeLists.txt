@@ -18,8 +18,8 @@ include_directories(
 
 # Use mock Logger instead of real one
 set(APP_SOURCES
-    ${PROJECT_ROOT}/src/command.cpp
-    ${PROJECT_ROOT}/src/command_manager.cpp
+    ${PROJECT_ROOT}/src/app/command.cpp
+    ${PROJECT_ROOT}/src/app/command_manager.cpp
     ${PROJECT_ROOT}/src/config/app_config.cpp
     ${PROJECT_ROOT}/src/config/app_config_loader.cpp
     ${PROJECT_ROOT}/src/config/config_manager.cpp

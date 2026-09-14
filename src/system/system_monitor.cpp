@@ -11,8 +11,8 @@
 #include <cstring>
 
 #include "app/app_limits.hpp"
+#include "app/command_manager.hpp"
 #include "app/mqtt.hpp"
-#include "command_manager.hpp"
 #include "logger.hpp"
 
 namespace {

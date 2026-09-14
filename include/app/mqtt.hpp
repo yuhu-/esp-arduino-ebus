@@ -14,8 +14,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "app/command.hpp"
 #include "app/ebus_accessor.hpp"
-#include "command.hpp"
 #include "config/app_config.hpp"
 #include "ebus/detail/json_writer.hpp"
 #include "ebus/device.hpp"

@@ -6,8 +6,8 @@
 #include <ebus/detail/json_writer.hpp>
 #include <string>
 
+#include "app/command_manager.hpp"
 #include "app/mqtt.hpp"
-#include "command_manager.hpp"
 
 // clang-format off
 namespace {

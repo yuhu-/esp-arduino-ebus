@@ -19,9 +19,9 @@
 #include <vector>
 
 #include "app/app_limits.hpp"
+#include "app/command_manager.hpp"
 #include "app/detail/cron.hpp"
 #include "app/ebus_accessor.hpp"
-#include "command_manager.hpp"
 #include "logger.hpp"
 
 Cron::Cron(CommandManager& commands) : commands_(commands) {}

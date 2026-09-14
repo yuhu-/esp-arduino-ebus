@@ -29,8 +29,8 @@
 #if !defined(EBUS_INTERNAL)
 #include "legacy/bus_type.hpp"
 #else
+#include "app/command_manager.hpp"
 #include "app/cron.hpp"
-#include "command_manager.hpp"
 #endif
 
 const AppConfig* DeviceStatus::config_ = nullptr;

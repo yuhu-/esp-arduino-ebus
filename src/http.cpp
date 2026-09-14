@@ -12,7 +12,7 @@
 #include "api/metrics_api.hpp"
 #include "api/status_api.hpp"
 #include "api/values_api.hpp"
-#include "command_manager.hpp"
+#include "app/command_manager.hpp"
 #include "http_utils.hpp"
 #include "logger.hpp"
 #include "main.hpp"

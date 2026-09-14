@@ -1,5 +1,5 @@
 #if defined(EBUS_INTERNAL)
-#include "command_manager.hpp"
+#include "app/command_manager.hpp"
 
 #include <esp_littlefs.h>
 #include <esp_timer.h>

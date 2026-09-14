@@ -4,7 +4,7 @@
 
 #include <esp_http_server.h>
 
-#include "command_manager.hpp"
+#include "app/command_manager.hpp"
 
 class CommandsApi {
  public:

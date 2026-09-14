@@ -1,9 +1,10 @@
 #pragma once
 
 #if defined(EBUS_INTERNAL)
-#include <command.hpp>
 #include <ha_profile.hpp>
 #include <string>
+
+#include "app/command.hpp"
 
 // clang-format off
 namespace mqtt_ha_limits {

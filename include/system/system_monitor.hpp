@@ -11,7 +11,7 @@
 #include <string>
 #include <string_view>
 
-#include "command.hpp"
+#include "app/command.hpp"
 #include "ebus/callbacks.hpp"
 
 class SystemMonitor {
