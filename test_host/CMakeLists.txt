@@ -23,17 +23,32 @@ set(APP_SOURCES
     ${PROJECT_ROOT}/src/config/app_config.cpp
     ${PROJECT_ROOT}/src/config/app_config_loader.cpp
     ${PROJECT_ROOT}/src/config/config_manager.cpp
+    ${PROJECT_ROOT}/src/app/cron.cpp
+    ${PROJECT_ROOT}/src/app/ebus_accessor.cpp
     ${PROJECT_ROOT}/src/data_profile.cpp
     ${PROJECT_ROOT}/src/ha_profile.cpp
+    ${PROJECT_ROOT}/src/mqtt_ha.cpp
     ${PROJECT_ROOT}/src/string_pool.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/mocks/logger.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/mocks/mqtt_mock.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/mocks/nvs_mock.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/mocks/http_stubs.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/mocks/app_stub.cpp
 )
 
-# Test files
-file(GLOB TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
+# Test files (explicit: adding a test file requires listing it here).
+set(TEST_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/app_config_tests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/command_manager_tests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/command_tests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/config_manager_tests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cron_tests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/data_profile_tests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/ha_profile_tests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/string_pool_tests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/wifi_tests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/mqtt_ha_tests.cpp
+)
 
 # Create test executable
 add_executable(app_tests ${APP_SOURCES} ${TEST_SOURCES})
@@ -43,6 +58,7 @@ target_compile_definitions(app_tests PRIVATE
     EBUS_INTERNAL=1
     EBUS_SIMULATION=0
     ESP32=1
+    AUTO_VERSION="host-test"
 )
 
 # Find and link Catch2 from the ebus library build

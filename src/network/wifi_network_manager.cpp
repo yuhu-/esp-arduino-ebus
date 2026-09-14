@@ -1,4 +1,4 @@
-#include "wifi_network_manager.hpp"
+#include "network/wifi_network_manager.hpp"
 
 #include <arpa/inet.h>
 #include <driver/gpio.h>
@@ -22,6 +22,7 @@
 #include "app/app_limits.hpp"
 #include "config/config_manager.hpp"
 #include "logger.hpp"
+#include "network/detail/wifi.hpp"
 
 ConfigManager* WifiNetworkManager::configManager_ = nullptr;
 esp_ip4_addr_t WifiNetworkManager::ipAddress_{};
@@ -41,43 +42,6 @@ void (*WifiNetworkManager::staIpAssignedCallback_)(
     const std::string& ipAddress) = nullptr;
 esp_netif_t* WifiNetworkManager::staNetif_ = nullptr;
 esp_netif_t* WifiNetworkManager::apNetif_ = nullptr;
-
-namespace {
-
-std::string trimCopy(const std::string& value) {
-  const auto start = value.find_first_not_of(" \t\r\n");
-  if (start == std::string::npos) return "";
-  const auto end = value.find_last_not_of(" \t\r\n");
-  return value.substr(start, end - start + 1);
-}
-
-std::string buildHostname(const std::string& source, const char* fallback) {
-  std::string hostname = trimCopy(source);
-  if (hostname.empty()) hostname = fallback;
-
-  std::string sanitized;
-  sanitized.reserve(hostname.size());
-  for (size_t i = 0; i < hostname.size(); ++i) {
-    const char c = hostname[i];
-    if (std::isalnum(static_cast<unsigned char>(c))) {
-      sanitized +=
-          static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    } else if (c == '-' || c == '_' || c == ' ') {
-      sanitized += '-';
-    }
-  }
-
-  while (!sanitized.empty() && sanitized.front() == '-') {
-    sanitized.erase(sanitized.begin());
-  }
-  while (!sanitized.empty() && sanitized.back() == '-') sanitized.pop_back();
-
-  if (sanitized.empty()) sanitized = "esp-ebus";
-  if (sanitized.size() > 63) sanitized.erase(63);
-  return sanitized;
-}
-
-}  // namespace
 
 void WifiNetworkManager::begin(ConfigManager* configManager) {
   static constexpr const char* default_hostname = "esp-eBus";
@@ -100,8 +64,8 @@ void WifiNetworkManager::begin(ConfigManager* configManager) {
       configManager_ != nullptr ? std::string(configManager_->readString(
                                       "thingName", default_hostname))
                                 : std::string(default_hostname);
-  const std::string hostname =
-      buildHostname(configuredThingName, default_hostname);
+  const std::string hostname = network::detail::wifi::buildHostname(
+      configuredThingName, default_hostname);
 
   esp_err_t err = esp_netif_init();
   if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {

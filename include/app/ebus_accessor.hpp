@@ -2,7 +2,7 @@
 
 #if defined(EBUS_INTERNAL)
 
-#if defined(EBUS_SIMULATION)
+#if EBUS_SIMULATION
 #include <esp_timer.h>
 #endif
 
@@ -25,7 +25,7 @@ void configureEbus(const ebus::EbusConfig& cfg);
 void startEbus();
 void stopEbus();
 
-#if defined(EBUS_SIMULATION)
+#if EBUS_SIMULATION
 esp_timer_handle_t simTimerHandle();
 void startEbusSimulation();
 #endif

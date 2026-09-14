@@ -9,7 +9,7 @@
 
 #include "http.hpp"
 #include "http_utils.hpp"
-#include "wifi_network_manager.hpp"
+#include "network/wifi_network_manager.hpp"
 
 namespace {
 

@@ -1,4 +1,4 @@
-#include "ebus_accessor.hpp"
+#include "app/ebus_accessor.hpp"
 
 #if defined(EBUS_INTERNAL)
 #include "logger.hpp"
@@ -21,7 +21,7 @@ void configureEbus(const ebus::EbusConfig& cfg) {
 void startEbus() { s_controller.start(); }
 void stopEbus() { s_controller.stop(); }
 
-#if defined(EBUS_SIMULATION)
+#if EBUS_SIMULATION
 esp_timer_handle_t sim_timer_handle = nullptr;
 
 esp_timer_handle_t simTimerHandle() { return sim_timer_handle; }

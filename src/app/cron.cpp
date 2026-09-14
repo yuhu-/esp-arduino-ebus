@@ -1,6 +1,6 @@
 #if defined(EBUS_INTERNAL)
 
-#include "cron.hpp"
+#include "app/cron.hpp"
 
 #include <sys/stat.h>
 
@@ -19,8 +19,9 @@
 #include <vector>
 
 #include "app/app_limits.hpp"
+#include "app/detail/cron.hpp"
+#include "app/ebus_accessor.hpp"
 #include "command_manager.hpp"
-#include "ebus_accessor.hpp"
 #include "logger.hpp"
 
 Cron cron;
@@ -115,19 +116,6 @@ bool matchSinglePart(std::string_view part, int value, int minValue,
   return ((value - start) % step) == 0;
 }
 
-bool matchField(std::string_view expr, int value, int minValue, int maxValue,
-                bool dayOfWeek) {
-  auto parts = split(expr, ',');
-  if (parts.empty()) return false;
-
-  for (std::string_view part : parts) {
-    if (part.empty()) return false;
-    if (matchSinglePart(part, value, minValue, maxValue, dayOfWeek))
-      return true;
-  }
-  return false;
-}
-
 bool validateSinglePart(std::string_view part, int minValue, int maxValue,
                         bool dayOfWeek) {
   if (part.empty()) return false;
@@ -171,6 +159,23 @@ bool validateSinglePart(std::string_view part, int minValue, int maxValue,
   if (start > end) return false;
 
   return true;
+}
+
+}  // namespace
+
+namespace app::detail::cron {
+
+bool matchField(std::string_view expr, int value, int minValue, int maxValue,
+                bool dayOfWeek) {
+  auto parts = split(expr, ',');
+  if (parts.empty()) return false;
+
+  for (std::string_view part : parts) {
+    if (part.empty()) return false;
+    if (matchSinglePart(part, value, minValue, maxValue, dayOfWeek))
+      return true;
+  }
+  return false;
 }
 
 bool validateFieldExpression(std::string_view expr, int minValue, int maxValue,
@@ -271,7 +276,7 @@ std::string validateRule(const Cron::Rule& rule) {
   return "";
 }
 
-}  // namespace
+}  // namespace app::detail::cron
 
 bool Cron::initFileSystem() { return commandManager.initFileSystem(); }
 
@@ -369,7 +374,7 @@ int64_t Cron::loadRules() {
 
     if (token == ebus::detail::JsonReader::Token::object_start) {
       Rule rule = ruleFromReader(reader);
-      if (validateRule(rule).empty()) {
+      if (app::detail::cron::validateRule(rule).empty()) {
         nextRules[rule.id] = std::move(rule);
       }
     }
@@ -394,7 +399,7 @@ int64_t Cron::replaceRules(std::string_view payload) {
 
     if (token == ebus::detail::JsonReader::Token::object_start) {
       Rule rule = ruleFromReader(reader);
-      if (validateRule(rule).empty()) {
+      if (app::detail::cron::validateRule(rule).empty()) {
         nextRules[rule.id] = std::move(rule);
       }
     }
@@ -453,7 +458,7 @@ int64_t Cron::saveRules() const {
 }
 
 const std::string Cron::evaluate(ebus::detail::JsonReader& reader) {
-  return validateRule(ruleFromReader(reader));
+  return app::detail::cron::validateRule(ruleFromReader(reader));
 }
 
 void Cron::taskFunc(void* arg) {
@@ -483,7 +488,7 @@ void Cron::tick() {
       Rule& rule = kv.second;
       if (!rule.enabled) continue;
       if (rule.last_triggered_minute == minuteStamp) continue;
-      if (!matchSchedule(rule.schedule, localTime)) continue;
+      if (!app::detail::cron::matchSchedule(rule.schedule, localTime)) continue;
 
       rule.last_triggered_minute = minuteStamp;
 

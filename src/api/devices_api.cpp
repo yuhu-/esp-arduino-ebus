@@ -2,7 +2,7 @@
 
 #if defined(EBUS_INTERNAL)
 
-#include "ebus_accessor.hpp"
+#include "app/ebus_accessor.hpp"
 #include "http.hpp"
 #include "http_utils.hpp"
 

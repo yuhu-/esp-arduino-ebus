@@ -16,7 +16,7 @@
 #include "http_utils.hpp"
 #include "logger.hpp"
 #include "main.hpp"
-#include "wifi_network_manager.hpp"
+#include "network/wifi_network_manager.hpp"
 
 static httpd_handle_t configServer = nullptr;
 static bool fallbackHandlersRegistered = false;

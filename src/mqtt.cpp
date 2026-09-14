@@ -7,11 +7,11 @@
 #include <functional>
 
 #include "app/app_limits.hpp"
+#include "app/ebus_accessor.hpp"
 #include "command_manager.hpp"
 #include "ebus/detail/json_reader.hpp"
 #include "ebus/detail/json_writer.hpp"  // Include for JsonWriter
 #include "ebus/status.hpp"
-#include "ebus_accessor.hpp"
 #include "logger.hpp"
 #include "main.hpp"
 #include "mqtt_ha.hpp"

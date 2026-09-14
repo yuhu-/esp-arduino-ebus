@@ -21,16 +21,16 @@
 #include "mqtt_ha.hpp"
 #include "network/captive_dns.hpp"
 #include "network/sntp.hpp"
+#include "network/wifi_network_manager.hpp"
 #include "system/adapter_version.hpp"
 #include "system/device_identity.hpp"
 #include "system_monitor.hpp"
-#include "wifi_network_manager.hpp"
 
 #if !defined(EBUS_INTERNAL)
 #include "legacy/bus_type.hpp"
 #else
+#include "app/cron.hpp"
 #include "command_manager.hpp"
-#include "cron.hpp"
 #endif
 
 const AppConfig* DeviceStatus::config_ = nullptr;

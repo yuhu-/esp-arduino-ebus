@@ -14,10 +14,10 @@
 #include <unordered_map>
 #include <vector>
 
+#include "app/ebus_accessor.hpp"
 #include "command.hpp"
 #include "ebus/device.hpp"
 #include "ebus/types.hpp"
-#include "ebus_accessor.hpp"
 
 enum class OutgoingActionType : uint8_t {
   Component,
