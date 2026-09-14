@@ -16,7 +16,6 @@
 #include "app/mqtt.hpp"
 #include "app/mqtt_ha.hpp"
 #include "config/app_config.hpp"
-#include "esp_ota_manager.hpp"
 #include "logger.hpp"
 #include "main.hpp"
 #include "network/captive_dns.hpp"
@@ -24,6 +23,7 @@
 #include "network/wifi_network_manager.hpp"
 #include "system/adapter_version.hpp"
 #include "system/device_identity.hpp"
+#include "system/esp_ota_manager.hpp"
 #include "system/system_monitor.hpp"
 
 #if !defined(EBUS_INTERNAL)
@@ -35,6 +35,7 @@
 
 const AppConfig* DeviceStatus::config_ = nullptr;
 uint32_t DeviceStatus::reset_code_ = 0;
+EspOtaManager* DeviceStatus::esp_ota_manager_ = nullptr;
 #if defined(EBUS_INTERNAL)
 SystemMonitor* DeviceStatus::monitor_ = nullptr;
 #endif
@@ -167,6 +168,12 @@ const AppConfig& DeviceStatus::config() { return *config_; }
 
 uint32_t DeviceStatus::resetCode() { return reset_code_; }
 
+void DeviceStatus::setEspOtaManager(EspOtaManager* manager) {
+  esp_ota_manager_ = manager;
+}
+
+EspOtaManager& DeviceStatus::espOtaManager() { return *esp_ota_manager_; }
+
 #if defined(EBUS_INTERNAL)
 void DeviceStatus::setMonitor(SystemMonitor* monitor) { monitor_ = monitor; }
 
@@ -228,7 +235,7 @@ void DeviceStatus::fetchAppStatus(const ebus::JsonChunkVisitor& visitor) {
     addThread("logger", logger.getTaskHandle(),
               app::limits::Task::logger_stack);
     addThread("dns", getCaptiveDnsTaskHandle(), app::limits::Task::dns_stack);
-    addThread("espota", espOtaManager.getTaskHandle(),
+    addThread("espota", DeviceStatus::espOtaManager().getTaskHandle(),
               app::limits::Task::espota_stack);
     addThread("status_led", WifiNetworkManager::getStatusLedTaskHandle(),
               app::limits::Task::status_led_stack);

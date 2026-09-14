@@ -8,6 +8,7 @@ struct AppConfig;
 #if defined(EBUS_INTERNAL)
 class SystemMonitor;
 #endif
+class EspOtaManager;
 
 /**
  * Device status model: gathers and serializes the full device status JSON.
@@ -17,12 +18,14 @@ class DeviceStatus {
  public:
   static void setConfig(const AppConfig* config);
   static void setResetCode(uint32_t code);
+  static void setEspOtaManager(EspOtaManager* manager);
 #if defined(EBUS_INTERNAL)
   static void setMonitor(SystemMonitor* monitor);
 #endif
 
   static const AppConfig& config();
   static uint32_t resetCode();
+  static EspOtaManager& espOtaManager();
 #if defined(EBUS_INTERNAL)
   static SystemMonitor& monitor();
 #endif
@@ -36,6 +39,7 @@ class DeviceStatus {
  private:
   static const AppConfig* config_;
   static uint32_t reset_code_;
+  static EspOtaManager* esp_ota_manager_;
 #if defined(EBUS_INTERNAL)
   static SystemMonitor* monitor_;
 #endif

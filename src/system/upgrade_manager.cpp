@@ -1,4 +1,4 @@
-#include "upgrade_manager.hpp"
+#include "system/upgrade_manager.hpp"
 
 #include <esp_err.h>
 #include <esp_http_client.h>
@@ -23,8 +23,6 @@
 #include "main.hpp"
 #include "system/device_status.hpp"
 
-extern UpgradeManager upgradeManager;
-
 namespace {
 constexpr size_t ota_buffer_size = 1024;
 constexpr uint8_t esp_image_magic = 0xE9;
@@ -33,17 +31,21 @@ constexpr size_t progress_step_bytes = 64 * 1024;
 
 namespace {
 esp_err_t handleUpgradeStatus(httpd_req_t* req) {
-  return upgradeManager.handleStatus(req);
+  return UpgradeManager::instance_->handleStatus(req);
 }
 
 esp_err_t handleUpgradeHttp(httpd_req_t* req) {
-  return upgradeManager.handleHttpUpgrade(req);
+  return UpgradeManager::instance_->handleHttpUpgrade(req);
 }
 
 esp_err_t handleUpgradeUpload(httpd_req_t* req) {
-  return upgradeManager.handleUpload(req);
+  return UpgradeManager::instance_->handleUpload(req);
 }
 }  // namespace
+
+UpgradeManager* UpgradeManager::instance_ = nullptr;
+
+UpgradeManager::UpgradeManager() { instance_ = this; }
 
 void UpgradeManager::begin() {
   RegisterUri("/api/v1/upgrade/status", HTTP_GET, handleUpgradeStatus);

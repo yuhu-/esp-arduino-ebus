@@ -9,18 +9,14 @@
 
 #include "app/app.hpp"
 #include "config/config_manager.hpp"
-#include "esp_ota_manager.hpp"
 #include "logger.hpp"
 #include "system/device_status.hpp"
-#include "upgrade_manager.hpp"
 
 #if defined(EBUS_INTERNAL)
 #include <ebus/controller.hpp>
 #endif
 
 ConfigManager configManager;
-UpgradeManager upgradeManager;
-EspOtaManager espOtaManager;
 
 extern "C" void app_main(void) {
   DebugSer.begin(115200);

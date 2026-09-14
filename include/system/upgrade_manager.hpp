@@ -12,6 +12,11 @@ class UpgradeManager {
  public:
   using PreUpgradeHook = std::function<void(void)>;
 
+  UpgradeManager();
+
+  // Dispatch pointer for the free httpd handler functions below.
+  static UpgradeManager* instance_;
+
   static void begin();
   void setPreUpgradeHook(PreUpgradeHook hook);
 

@@ -8,6 +8,8 @@
 #if defined(EBUS_INTERNAL)
 #include "system/system_monitor.hpp"
 #endif
+#include "system/esp_ota_manager.hpp"
+#include "system/upgrade_manager.hpp"
 
 class ConfigManager;
 
@@ -42,6 +44,8 @@ class App {
  private:
   static App* instance_;
 
+  UpgradeManager upgrade_manager_;
+  EspOtaManager esp_ota_manager_;
 #if defined(EBUS_INTERNAL)
   SystemMonitor monitor_;
 #endif

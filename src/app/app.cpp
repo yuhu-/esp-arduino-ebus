@@ -7,7 +7,6 @@
 
 #include "config/app_config_loader.hpp"
 #include "config/config_manager.hpp"
-#include "esp_ota_manager.hpp"
 #include "hardware/board_control.hpp"
 #include "hardware/pwm.hpp"
 #include "http.hpp"
@@ -20,7 +19,8 @@
 #include "system/adapter_version.hpp"
 #include "system/device_identity.hpp"
 #include "system/device_status.hpp"
-#include "upgrade_manager.hpp"
+#include "system/esp_ota_manager.hpp"
+#include "system/upgrade_manager.hpp"
 
 #if defined(EBUS_INTERNAL)
 #include "app/command_manager.hpp"
@@ -136,7 +136,7 @@ bool App::initServices() {
       });
 #endif
 
-  espOtaManager.begin();
+  esp_ota_manager_.begin();
   enableTX();
 
 #if defined(EBUS_INTERNAL)
@@ -265,6 +265,7 @@ bool App::initServices() {
 
   monitor_.begin();
   DeviceStatus::setMonitor(&monitor_);
+  DeviceStatus::setEspOtaManager(&esp_ota_manager_);
 
   commandManager.setDataUpdatedCallback(Mqtt::publishValue);
 
@@ -351,10 +352,10 @@ bool App::initServices() {
 bool App::initHttp() {
   SetupHttpHandlers();
   HttpUtils::setCustomHeaders(std::string(config_.http.headers.c_str()));
-  upgradeManager.begin();
+  upgrade_manager_.begin();
   SetupHttpFallbackHandlers();
-  upgradeManager.setPreUpgradeHook([this]() { stop(); });
-  espOtaManager.setPreUpgradeHook([this]() { stop(); });
+  upgrade_manager_.setPreUpgradeHook([this]() { stop(); });
+  esp_ota_manager_.setPreUpgradeHook([this]() { stop(); });
   return true;
 }
 
