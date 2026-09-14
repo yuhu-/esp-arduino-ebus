@@ -13,9 +13,7 @@ extern const char metrics_html_start[] asm("_binary_metrics_html_start");
 
 }  // namespace
 
-MetricsApi* MetricsApi::instance_ = nullptr;
-
-MetricsApi::MetricsApi() { instance_ = this; }
+MetricsApi::MetricsApi() {}
 
 bool MetricsApi::registerHandlers(httpd_handle_t server) {
   if (server == nullptr) return false;

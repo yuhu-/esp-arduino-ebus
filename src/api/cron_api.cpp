@@ -39,7 +39,7 @@ esp_err_t CronApi::handleCronPage(httpd_req_t* req) {
 esp_err_t CronApi::handleCron(httpd_req_t* req) {
   httpd_resp_set_type(req, "application/json;charset=utf-8");
   HttpUtils::applyCustomHeaders(req);
-  cron.fetchRules([req](std::string_view chunk) {
+  instance_->cron_.fetchRules([req](std::string_view chunk) {
     httpd_resp_send_chunk(req, chunk.data(), chunk.size());
   });
   httpd_resp_send_chunk(req, nullptr, 0);
@@ -68,7 +68,7 @@ esp_err_t CronApi::handleCronEvaluate(httpd_req_t* req) {
     std::string_view rule_sv = reader.rawValue();
     if (rule_sv.empty()) break;
     ebus::detail::JsonReader rule_reader(rule_sv);
-    evalError = Cron::evaluate(rule_reader);
+    evalError = instance_->cron_.evaluate(rule_reader);
     if (!evalError.empty()) break;
   }
 
@@ -88,7 +88,7 @@ esp_err_t CronApi::handleCronSave(httpd_req_t* req) {
     return ESP_OK;
   }
   sr.endOfInput();
-  int64_t bytes = cron.replaceRules(sr.jsonReader().remaining());
+  int64_t bytes = instance_->cron_.replaceRules(sr.jsonReader().remaining());
   if (bytes >= 0) {
     HttpUtils::sendSuccessResponse(
         req, "save", "successful",
@@ -101,7 +101,7 @@ esp_err_t CronApi::handleCronSave(httpd_req_t* req) {
 }
 
 esp_err_t CronApi::handleCronLoad(httpd_req_t* req) {
-  int64_t bytes = cron.loadRules();
+  int64_t bytes = instance_->cron_.loadRules();
   if (bytes > 0) {
     HttpUtils::sendSuccessResponse(
         req, "load", "successful",

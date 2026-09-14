@@ -12,9 +12,7 @@ extern const char status_html_start[] asm("_binary_status_html_start");
 
 }  // namespace
 
-StatusApi* StatusApi::instance_ = nullptr;
-
-StatusApi::StatusApi() { instance_ = this; }
+StatusApi::StatusApi() {}
 
 bool StatusApi::registerHandlers(httpd_handle_t server) {
   if (server == nullptr) return false;

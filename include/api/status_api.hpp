@@ -9,8 +9,6 @@ class StatusApi {
   bool registerHandlers(httpd_handle_t server);
 
  private:
-  static StatusApi* instance_;
-
   static esp_err_t handleStatusPage(httpd_req_t* req);
   static esp_err_t handleStatus(httpd_req_t* req);
 

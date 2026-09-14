@@ -24,7 +24,9 @@
 #include "command_manager.hpp"
 #include "logger.hpp"
 
-Cron cron;
+Cron::Cron(CommandManager& commands) : commands_(commands) {}
+
+Cron cron(commandManager);
 
 namespace {
 constexpr const char* cron_file_path = "/littlefs/cron.json";
@@ -215,7 +217,7 @@ bool matchSchedule(const std::string& schedule, const tm& localTime) {
          matchField(std::string_view(fields[4]), localTime.tm_wday, 0, 6, true);
 }
 
-std::string validateRule(const Cron::Rule& rule) {
+std::string validateRule(const Cron::Rule& rule, CommandManager& commands) {
   if (rule.id.empty()) return "Missing or invalid 'id'";
   if (rule.schedule.empty()) return "Missing or invalid 'schedule'";
   if (rule.command_key.empty()) return "Missing or invalid 'command_key'";
@@ -263,7 +265,7 @@ std::string validateRule(const Cron::Rule& rule) {
   if (!validateFieldExpression(fields[4], 0, 6, true))
     return "Invalid day-of-week field";
 
-  Command* command = commandManager.findCommand(rule.command_key);
+  Command* command = commands.findCommand(rule.command_key);
   if (command == nullptr)
     return "Command key '" + rule.command_key + "' not found";
   if (!command->hasWriteCmd())
@@ -374,7 +376,7 @@ int64_t Cron::loadRules() {
 
     if (token == ebus::detail::JsonReader::Token::object_start) {
       Rule rule = ruleFromReader(reader);
-      if (app::detail::cron::validateRule(rule).empty()) {
+      if (app::detail::cron::validateRule(rule, commands_).empty()) {
         nextRules[rule.id] = std::move(rule);
       }
     }
@@ -399,7 +401,7 @@ int64_t Cron::replaceRules(std::string_view payload) {
 
     if (token == ebus::detail::JsonReader::Token::object_start) {
       Rule rule = ruleFromReader(reader);
-      if (app::detail::cron::validateRule(rule).empty()) {
+      if (app::detail::cron::validateRule(rule, commands_).empty()) {
         nextRules[rule.id] = std::move(rule);
       }
     }
@@ -458,7 +460,7 @@ int64_t Cron::saveRules() const {
 }
 
 const std::string Cron::evaluate(ebus::detail::JsonReader& reader) {
-  return app::detail::cron::validateRule(ruleFromReader(reader));
+  return app::detail::cron::validateRule(ruleFromReader(reader), commands_);
 }
 
 void Cron::taskFunc(void* arg) {
@@ -492,7 +494,7 @@ void Cron::tick() {
 
       rule.last_triggered_minute = minuteStamp;
 
-      Command* command = commandManager.findCommand(rule.command_key);
+      Command* command = commands_.findCommand(rule.command_key);
       if (command == nullptr || !command->hasWriteCmd()) {
         char buf[128];
         snprintf(buf, sizeof(buf), "Cron skipped, command unavailable: %s",

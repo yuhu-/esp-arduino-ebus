@@ -12,6 +12,8 @@
 #include <string>
 #include <unordered_map>
 
+class CommandManager;
+
 class Cron {
  public:
   struct Rule {
@@ -25,7 +27,8 @@ class Cron {
 
   static bool initFileSystem();
 
-  Cron() = default;
+  Cron() = delete;
+  explicit Cron(CommandManager& commands);
   ~Cron() { stop(); }
 
   void start();
@@ -36,7 +39,7 @@ class Cron {
 
   void fetchRules(const ebus::JsonChunkVisitor& visitor) const;
 
-  static const std::string evaluate(ebus::detail::JsonReader& reader);
+  const std::string evaluate(ebus::detail::JsonReader& reader);
 
   TaskHandle_t getTaskHandle() const { return task_handle_; }
   size_t getRulesCount() const { return rules_.size(); }
@@ -44,6 +47,7 @@ class Cron {
   static Rule ruleFromReader(ebus::detail::JsonReader& reader);
 
  private:
+  CommandManager& commands_;
   std::unordered_map<std::string, Rule> rules_;
 
   volatile bool stop_runner_ = false;

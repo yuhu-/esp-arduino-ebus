@@ -13,9 +13,7 @@ extern const char devices_html_start[] asm("_binary_devices_html_start");
 
 }  // namespace
 
-DevicesApi* DevicesApi::instance_ = nullptr;
-
-DevicesApi::DevicesApi() { instance_ = this; }
+DevicesApi::DevicesApi() {}
 
 bool DevicesApi::registerHandlers(httpd_handle_t server) {
   if (server == nullptr) return false;

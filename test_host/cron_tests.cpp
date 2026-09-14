@@ -114,22 +114,28 @@ TEST_CASE("Cron validateFieldExpression checks ranges", "[cron]") {
 
 TEST_CASE("Cron validateRule accepts a complete rule", "[cron]") {
   registerWriteCommand();
-  REQUIRE(app::detail::cron::validateRule(makeRule("* * * * *", "c1")) == "");
+  REQUIRE(app::detail::cron::validateRule(makeRule("* * * * *", "c1"),
+                                          commandManager) == "");
 }
 
 TEST_CASE("Cron validateRule reports missing parts", "[cron]") {
   registerWriteCommand();
   Cron::Rule missing_id = makeRule("* * * * *", "c1");
   missing_id.id.clear();
-  REQUIRE(app::detail::cron::validateRule(missing_id).empty() == false);
+  REQUIRE(app::detail::cron::validateRule(missing_id, commandManager).empty() ==
+          false);
 
-  REQUIRE(app::detail::cron::validateRule(makeRule("not a schedule", "c1")) ==
+  REQUIRE(app::detail::cron::validateRule(makeRule("not a schedule", "c1"),
+                                          commandManager) ==
           "Invalid schedule expression");
-  REQUIRE(app::detail::cron::validateRule(makeRule("* * * *", "c1")) ==
+  REQUIRE(app::detail::cron::validateRule(makeRule("* * * *", "c1"),
+                                          commandManager) ==
           "Schedule must have 5 fields");
-  REQUIRE(app::detail::cron::validateRule(makeRule("99 99 99 99 99", "c1")) ==
+  REQUIRE(app::detail::cron::validateRule(makeRule("99 99 99 99 99", "c1"),
+                                          commandManager) ==
           "Invalid schedule expression");
-  REQUIRE(app::detail::cron::validateRule(makeRule("* * * * *", "missing")) ==
+  REQUIRE(app::detail::cron::validateRule(makeRule("* * * * *", "missing"),
+                                          commandManager) ==
           "Command key 'missing' not found");
 }
 
@@ -143,6 +149,7 @@ TEST_CASE("Cron validateRule requires a write command", "[cron]") {
   ebus::detail::JsonReader reader(json);
   commandManager.insertCommand(Command::fromJson(reader));
 
-  REQUIRE(app::detail::cron::validateRule(makeRule("* * * * *", "ro")) ==
+  REQUIRE(app::detail::cron::validateRule(makeRule("* * * * *", "ro"),
+                                          commandManager) ==
           "Command 'ro' has no write_cmd");
 }

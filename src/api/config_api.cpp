@@ -18,9 +18,7 @@ extern const char config_html_start[] asm("_binary_config_html_start");
 
 }  // namespace
 
-ConfigApi* ConfigApi::instance_ = nullptr;
-
-ConfigApi::ConfigApi() { instance_ = this; }
+ConfigApi::ConfigApi() {}
 
 bool ConfigApi::registerHandlers(httpd_handle_t server) {
   if (server == nullptr) return false;
