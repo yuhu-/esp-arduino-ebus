@@ -22,7 +22,7 @@
 #include "app/command_manager.hpp"
 #include "app/detail/cron.hpp"
 #include "app/ebus_accessor.hpp"
-#include "logger.hpp"
+#include "system/logger.hpp"
 
 Cron::Cron(CommandManager& commands) : commands_(commands) {}
 

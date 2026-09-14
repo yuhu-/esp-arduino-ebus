@@ -1,12 +1,12 @@
 #if defined(EBUS_INTERNAL)
-#include "data_profile.hpp"
+#include "app/data_profile.hpp"
 
 #include <algorithm>
 #include <cstring>
 #include <iterator>
 
-#include "data_profile_gen.hpp"
-#include "logger.hpp"
+#include "app/data_profile_gen.hpp"
+#include "system/logger.hpp"
 
 const DataProfile* findDataProfile(std::string_view name) {
   auto it = std::find_if(std::begin(profiles), std::end(profiles),

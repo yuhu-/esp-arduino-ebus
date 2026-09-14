@@ -12,8 +12,8 @@
 #include <vector>
 
 #include "app/app.hpp"
-#include "http.hpp"
-#include "http_utils.hpp"
+#include "network/http.hpp"
+#include "network/http_utils.hpp"
 
 extern ConfigManager configManager;
 

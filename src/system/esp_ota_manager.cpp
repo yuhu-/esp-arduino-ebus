@@ -20,8 +20,8 @@
 #endif
 
 #include "app/app_limits.hpp"
-#include "logger.hpp"
 #include "main.hpp"
+#include "system/logger.hpp"
 
 namespace {
 constexpr size_t ota_buffer_size = 1024;

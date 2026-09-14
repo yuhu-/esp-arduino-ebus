@@ -4,9 +4,9 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include "adc.hpp"
-#include "http.hpp"
-#include "http_utils.hpp"
+#include "hardware/adc.hpp"
+#include "network/http.hpp"
+#include "network/http_utils.hpp"
 
 namespace {
 

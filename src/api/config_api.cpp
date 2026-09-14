@@ -7,8 +7,8 @@
 #include <cstdio>
 #include <cstring>
 
-#include "http.hpp"
-#include "http_utils.hpp"
+#include "network/http.hpp"
+#include "network/http_utils.hpp"
 #include "network/wifi_network_manager.hpp"
 
 namespace {

@@ -4,8 +4,8 @@
 
 #include <string>
 
-#include "http.hpp"
-#include "http_utils.hpp"
+#include "network/http.hpp"
+#include "network/http_utils.hpp"
 
 bool RegisterUri(const char* uri, httpd_method_t method,
                  esp_err_t (*handler)(httpd_req_t*)) {

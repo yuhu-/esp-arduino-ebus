@@ -1,4 +1,4 @@
-#include "dns_server.hpp"
+#include "network/dns_server.hpp"
 
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -10,7 +10,7 @@
 #include <cstring>
 
 #include "app/app_limits.hpp"
-#include "logger.hpp"
+#include "system/logger.hpp"
 
 namespace {
 constexpr size_t dns_header_size = 12;

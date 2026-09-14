@@ -1,4 +1,4 @@
-#include "adc.hpp"
+#include "hardware/adc.hpp"
 
 #include <esp_adc/adc_continuous.h>
 #include <esp_err.h>
@@ -7,7 +7,7 @@
 
 #include <cstring>
 
-#include "logger.hpp"
+#include "system/logger.hpp"
 
 Adc adc;
 

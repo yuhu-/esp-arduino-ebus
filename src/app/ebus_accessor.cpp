@@ -1,7 +1,7 @@
 #include "app/ebus_accessor.hpp"
 
 #if defined(EBUS_INTERNAL)
-#include "logger.hpp"
+#include "system/logger.hpp"
 
 static ebus::EbusConfig s_config;
 static ebus::Controller s_controller;

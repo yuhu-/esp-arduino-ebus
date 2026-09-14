@@ -9,8 +9,8 @@
 
 #include "app/app.hpp"
 #include "config/config_manager.hpp"
-#include "logger.hpp"
 #include "system/device_status.hpp"
+#include "system/logger.hpp"
 
 #if defined(EBUS_INTERNAL)
 #include <ebus/controller.hpp>

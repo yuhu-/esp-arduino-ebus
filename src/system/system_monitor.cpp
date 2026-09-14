@@ -13,7 +13,7 @@
 #include "app/app_limits.hpp"
 #include "app/command_manager.hpp"
 #include "app/mqtt.hpp"
-#include "logger.hpp"
+#include "system/logger.hpp"
 
 namespace {
 constexpr uint32_t system_monitor_period_ms = 30000;

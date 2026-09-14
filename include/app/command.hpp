@@ -10,9 +10,9 @@
 #include <string>
 #include <string_view>
 
-#include "data_profile.hpp"
-#include "ha_profile.hpp"
-#include "string_pool.hpp"
+#include "app/data_profile.hpp"
+#include "app/ha_profile.hpp"
+#include "system/string_pool.hpp"
 
 namespace command_types {
 

@@ -1,10 +1,10 @@
 #if defined(EBUS_INTERNAL)
-#include "ha_profile.hpp"
+#include "app/ha_profile.hpp"
 
 #include <algorithm>
 #include <iterator>
 
-#include "ha_profile_gen.hpp"
+#include "app/ha_profile_gen.hpp"
 
 const HAProfile* findHAProfile(std::string_view name) {
   auto it = std::find_if(std::begin(profiles), std::end(profiles),

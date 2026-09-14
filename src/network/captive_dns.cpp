@@ -4,8 +4,8 @@
 
 #include <cstdio>
 
-#include "dns_server.hpp"
-#include "logger.hpp"
+#include "network/dns_server.hpp"
+#include "system/logger.hpp"
 
 namespace {
 

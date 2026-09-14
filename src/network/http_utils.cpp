@@ -1,4 +1,4 @@
-#include "http_utils.hpp"
+#include "network/http_utils.hpp"
 
 #include <esp_err.h>
 
@@ -8,7 +8,7 @@
 #include <mutex>
 #include <utility>
 
-#include "logger.hpp"
+#include "system/logger.hpp"
 
 namespace HttpUtils {
 

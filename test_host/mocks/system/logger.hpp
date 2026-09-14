@@ -1,6 +1,9 @@
 #pragma once
 
-// Mock Logger for host testing - no FreeRTOS dependency
+// Mock Logger for host testing - no FreeRTOS dependency.
+// MIRROR of the include path: quoted #include "system/logger.hpp" resolves
+// here on host (mocks/ precedes include/) and to the real header on device.
+// Keep signatures in sync with include/system/logger.hpp.
 
 #include <cstdint>
 #include <string>
@@ -14,10 +17,10 @@ class Logger {
   Logger(const Logger&) = delete;
   Logger& operator=(const Logger&) = delete;
 
-  void error(std::string_view, bool = false, uint32_t = 0, uint32_t = 0) {}
-  void warn(std::string_view, bool = false, uint32_t = 0, uint32_t = 0) {}
-  void info(std::string_view, bool = false, uint32_t = 0, uint32_t = 0) {}
-  void debug(std::string_view, bool = false, uint32_t = 0, uint32_t = 0) {}
+  void error(std::string_view, bool = false, uint32_t = 0, uint16_t = 0) {}
+  void warn(std::string_view, bool = false, uint32_t = 0, uint16_t = 0) {}
+  void info(std::string_view, bool = false, uint32_t = 0, uint16_t = 0) {}
+  void debug(std::string_view, bool = false, uint32_t = 0, uint16_t = 0) {}
 
   void fetchLogs(const void* visitor = nullptr, uint64_t = 0) const {}
   void fetchTimeRelation(const void* visitor = nullptr) const {}

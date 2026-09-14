@@ -7,8 +7,8 @@
 
 #include "app/command_manager.hpp"
 #include "app/ebus_accessor.hpp"
-#include "http.hpp"
-#include "http_utils.hpp"
+#include "network/http.hpp"
+#include "network/http_utils.hpp"
 
 namespace {
 

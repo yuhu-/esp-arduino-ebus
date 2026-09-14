@@ -1,7 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <string>
 
-#include "data_profile.hpp"
+#include "app/data_profile.hpp"
 
 TEST_CASE("DataProfile lookup finds known entries", "[data_profile]") {
   const DataProfile* temp = findDataProfile("data2b_celsius");

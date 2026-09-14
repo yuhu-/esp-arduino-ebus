@@ -4,7 +4,7 @@
 
 #include <esp_http_server.h>
 
-#include "logger.hpp"
+#include "system/logger.hpp"
 
 class LogsApi {
  public:

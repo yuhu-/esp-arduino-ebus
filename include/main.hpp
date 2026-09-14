@@ -4,7 +4,7 @@
 #include <ebus/types.hpp>
 #include <string>
 
-#include "uart_port.hpp"
+#include "hardware/uart_port.hpp"
 
 // Early platform helpers (moved out of main.cpp)
 #include "hardware/board_control.hpp"

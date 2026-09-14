@@ -1,4 +1,4 @@
-#include "http.hpp"
+#include "network/http.hpp"
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -13,10 +13,10 @@
 #include "api/status_api.hpp"
 #include "api/values_api.hpp"
 #include "app/command_manager.hpp"
-#include "http_utils.hpp"
-#include "logger.hpp"
 #include "main.hpp"
+#include "network/http_utils.hpp"
 #include "network/wifi_network_manager.hpp"
+#include "system/logger.hpp"
 
 static httpd_handle_t configServer = nullptr;
 static bool fallbackHandlersRegistered = false;

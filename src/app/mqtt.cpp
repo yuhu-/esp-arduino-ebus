@@ -13,9 +13,9 @@
 #include "ebus/detail/json_reader.hpp"
 #include "ebus/detail/json_writer.hpp"  // Include for JsonWriter
 #include "ebus/status.hpp"
-#include "logger.hpp"
 #include "main.hpp"
 #include "system/device_status.hpp"
+#include "system/logger.hpp"
 
 Mqtt mqtt;
 

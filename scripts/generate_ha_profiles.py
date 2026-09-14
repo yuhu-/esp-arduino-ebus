@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Pre-build script for PlatformIO.
-Reads ha_profiles.json + ha_profiles_user.json and generates include/ha_profile_gen.hpp
+Reads ha_profiles.json + ha_profiles_user.json and generates include/app/ha_profile_gen.hpp
 with a static C++ array (base profiles merged with user overlay).
 """
 
@@ -17,7 +17,7 @@ except NameError:
 
 BASE_JSON = os.path.join(PROJECT_ROOT, "profiles", "ha_profiles.json")
 OVERLAY_JSON = os.path.join(PROJECT_ROOT, "profiles", "ha_profiles_user.json")
-OUTPUT_FILE = os.path.join(PROJECT_ROOT, "include", "ha_profile_gen.hpp")
+OUTPUT_FILE = os.path.join(PROJECT_ROOT, "include", "app", "ha_profile_gen.hpp")
 
 
 def load_profiles(path):
@@ -50,7 +50,7 @@ def generate():
         "",
         "#if defined(EBUS_INTERNAL)",
         "",
-        '#include "ha_profile.hpp"',
+        '#include "app/ha_profile.hpp"',
         "",
         "namespace {",
         "// clang-format off",

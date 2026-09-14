@@ -21,8 +21,8 @@
 
 #include "app/app_limits.hpp"
 #include "config/config_manager.hpp"
-#include "logger.hpp"
 #include "network/detail/wifi.hpp"
+#include "system/logger.hpp"
 
 ConfigManager* WifiNetworkManager::configManager_ = nullptr;
 esp_ip4_addr_t WifiNetworkManager::ipAddress_{};

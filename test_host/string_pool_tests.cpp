@@ -1,7 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <string>
 
-#include "string_pool.hpp"
+#include "system/string_pool.hpp"
 
 // NOTE: StringPool is a process-wide singleton, so this is a single ordered
 // test case using unique keys to stay independent of execution order.

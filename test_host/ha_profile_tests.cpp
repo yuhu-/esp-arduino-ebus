@@ -1,7 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <string>
 
-#include "ha_profile.hpp"
+#include "app/ha_profile.hpp"
 
 TEST_CASE("HAProfile lookup finds known entries", "[ha_profile]") {
   const HAProfile* temp = findHAProfile("sensor_temperature");

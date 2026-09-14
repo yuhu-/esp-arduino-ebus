@@ -12,9 +12,9 @@
 #include <regex>
 
 #include "app/command_manager.hpp"
-#include "data_profile.hpp"
-#include "ha_profile.hpp"
-#include "logger.hpp"
+#include "app/data_profile.hpp"
+#include "app/ha_profile.hpp"
+#include "system/logger.hpp"
 
 const uint32_t& Command::getSessionId() const { return session_id_; }
 

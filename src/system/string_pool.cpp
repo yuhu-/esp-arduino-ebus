@@ -1,5 +1,5 @@
 #if defined(EBUS_INTERNAL)
-#include "string_pool.hpp"
+#include "system/string_pool.hpp"
 
 StringPool& StringPool::instance() {
   static StringPool pool;

@@ -2,7 +2,7 @@
 
 #include <esp_http_server.h>
 
-#include "adc.hpp"
+#include "hardware/adc.hpp"
 
 class AdcApi {
  public:

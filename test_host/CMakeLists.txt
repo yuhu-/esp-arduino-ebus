@@ -25,10 +25,10 @@ set(APP_SOURCES
     ${PROJECT_ROOT}/src/config/config_manager.cpp
     ${PROJECT_ROOT}/src/app/cron.cpp
     ${PROJECT_ROOT}/src/app/ebus_accessor.cpp
-    ${PROJECT_ROOT}/src/data_profile.cpp
-    ${PROJECT_ROOT}/src/ha_profile.cpp
+    ${PROJECT_ROOT}/src/app/data_profile.cpp
+    ${PROJECT_ROOT}/src/app/ha_profile.cpp
     ${PROJECT_ROOT}/src/app/mqtt_ha.cpp
-    ${PROJECT_ROOT}/src/string_pool.cpp
+    ${PROJECT_ROOT}/src/system/string_pool.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/mocks/logger.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/mocks/mqtt_mock.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/mocks/nvs_mock.cpp

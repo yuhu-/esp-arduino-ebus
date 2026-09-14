@@ -7,8 +7,8 @@
 #include "app/command_manager.hpp"
 #include "app/mqtt.hpp"
 #include "app/mqtt_ha.hpp"
-#include "http.hpp"
-#include "http_utils.hpp"
+#include "network/http.hpp"
+#include "network/http_utils.hpp"
 
 namespace {
 

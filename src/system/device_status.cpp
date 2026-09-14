@@ -16,7 +16,6 @@
 #include "app/mqtt.hpp"
 #include "app/mqtt_ha.hpp"
 #include "config/app_config.hpp"
-#include "logger.hpp"
 #include "main.hpp"
 #include "network/captive_dns.hpp"
 #include "network/sntp.hpp"
@@ -24,6 +23,7 @@
 #include "system/adapter_version.hpp"
 #include "system/device_identity.hpp"
 #include "system/esp_ota_manager.hpp"
+#include "system/logger.hpp"
 #include "system/system_monitor.hpp"
 
 #if !defined(EBUS_INTERNAL)

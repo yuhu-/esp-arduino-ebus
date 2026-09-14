@@ -17,11 +17,11 @@
 #undef INADDR_NONE
 #endif
 
-#include "http.hpp"
-#include "http_utils.hpp"
-#include "logger.hpp"
 #include "main.hpp"
+#include "network/http.hpp"
+#include "network/http_utils.hpp"
 #include "system/device_status.hpp"
+#include "system/logger.hpp"
 
 namespace {
 constexpr size_t ota_buffer_size = 1024;
