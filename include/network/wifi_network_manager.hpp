@@ -3,6 +3,7 @@
 #include <esp_netif_types.h>
 #include <esp_wifi.h>
 
+#include <ebus/detail/json_writer.hpp>
 #include <string>
 #include <string_view>
 
@@ -71,3 +72,7 @@ class WifiNetworkManager {
   static esp_netif_t* staNetif_;
   static esp_netif_t* apNetif_;
 };
+
+// Renders the "wifi" status section. Colocated here because it reads
+// exclusively live WifiNetworkManager state (no config snapshot needed).
+void appendWifiStatus(ebus::detail::JsonWriter& writer);

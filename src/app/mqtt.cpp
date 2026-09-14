@@ -306,12 +306,12 @@ void Mqtt::taskFunc(void* arg) {
   // Static storage: no heap, survives task restarts. Re-initialized on every
   // start so each task run gets a fresh empty queue (never vQueueDelete'd:
   // freeing static storage would corrupt the heap).
-  static uint8_t outgoing_storage[max_outgoing_queue_size *
-                                  sizeof(OutgoingAction)];
+  static uint8_t
+      outgoing_storage[max_outgoing_queue_size * sizeof(OutgoingAction)];
   static StaticQueue_t outgoing_cb;
-  self->outgoing_queue_ = xQueueCreateStatic(
-      max_outgoing_queue_size, sizeof(OutgoingAction), outgoing_storage,
-      &outgoing_cb);
+  self->outgoing_queue_ =
+      xQueueCreateStatic(max_outgoing_queue_size, sizeof(OutgoingAction),
+                         outgoing_storage, &outgoing_cb);
 
   uint8_t tele_phase = 0;
 
@@ -782,6 +782,15 @@ void Mqtt::publishResponse(std::string_view id, std::string_view status,
     writer.writeField("status", status);
     if (bytes > 0) writer.writeField("bytes", static_cast<uint32_t>(bytes));
   });
+}
+
+void appendMqttStatus(ebus::detail::JsonWriter& w,
+                      const AppConfig::Mqtt& mqtt_config) {
+  auto obj_scope = w.objectScope();
+  w.writeField("enabled", mqtt.isEnabled());
+  w.writeField("server", mqtt_config.server.c_str());
+  w.writeField("user", mqtt_config.user.c_str());
+  w.writeField("connected", mqtt.isConnected());
 }
 
 #endif

@@ -110,51 +110,6 @@ struct ChipStatus {
   }
 };
 
-struct WifiStatus {
-  static void toJson(ebus::detail::JsonWriter& writer) {
-    auto scope = writer.objectScope();
-    writer.writeField("last_connect", WifiNetworkManager::getLastConnect());
-    writer.writeField("reconnect_count",
-                      WifiNetworkManager::getReconnectCount());
-    writer.writeField("rssi", WifiNetworkManager::RSSI());
-    if (WifiNetworkManager::isStaticIpEnabled()) {
-      writer.writeField("static_ip", true);
-      writer.writeField("ip_address",
-                        WifiNetworkManager::getConfiguredIpAddress());
-      writer.writeField("gateway", WifiNetworkManager::getConfiguredGateway());
-      writer.writeField("netmask", WifiNetworkManager::getConfiguredNetmask());
-      writer.writeField("dns1", WifiNetworkManager::getConfiguredDns1());
-      writer.writeField("dns2", WifiNetworkManager::getConfiguredDns2());
-    } else {
-      esp_netif_ip_info_t staIpInfo{};
-      const bool hasStaIp = WifiNetworkManager::getStaIpInfo(&staIpInfo);
-      esp_ip4_addr_t dnsMain{}, dnsBackup{};
-      const bool hasDnsMain = WifiNetworkManager::getDnsIp(0, &dnsMain);
-      const bool hasDnsBackup = WifiNetworkManager::getDnsIp(1, &dnsBackup);
-      writer.writeField("static_ip", false);
-      writer.writeField(
-          "ip_address",
-          hasStaIp ? WifiNetworkManager::ipToString(staIpInfo.ip) : "");
-      writer.writeField(
-          "gateway",
-          hasStaIp ? WifiNetworkManager::ipToString(staIpInfo.gw) : "");
-      writer.writeField(
-          "netmask",
-          hasStaIp ? WifiNetworkManager::ipToString(staIpInfo.netmask) : "");
-      writer.writeField(
-          "dns1", hasDnsMain ? WifiNetworkManager::ipToString(dnsMain) : "");
-      writer.writeField("dns2", hasDnsBackup
-                                    ? WifiNetworkManager::ipToString(dnsBackup)
-                                    : "");
-    }
-    writer.writeField("ssid", WifiNetworkManager::SSID());
-    writer.writeField("bssid", WifiNetworkManager::BSSIDstr());
-    writer.writeField("channel", WifiNetworkManager::channel());
-    writer.writeField("hostname", WifiNetworkManager::getHostname());
-    writer.writeField("mac_address", WifiNetworkManager::macAddress());
-  }
-};
-
 #if defined(EBUS_INTERNAL)
 struct EbusStatus {
   static void toJson(ebus::detail::JsonWriter& w) {
@@ -176,16 +131,6 @@ struct ScheduleStatus {
                  static_cast<uint32_t>(commandManager.getActiveCommands()));
     w.writeField("passive_commands",
                  static_cast<uint32_t>(commandManager.getPassiveCommands()));
-  }
-};
-
-struct MqttStatus {
-  static void toJson(ebus::detail::JsonWriter& w) {
-    auto obj_scope = w.objectScope();
-    w.writeField("enabled", mqtt.isEnabled());
-    w.writeField("server", statusConfig().mqtt.server.c_str());
-    w.writeField("user", statusConfig().mqtt.user.c_str());
-    w.writeField("connected", mqtt.isConnected());
   }
 };
 
@@ -230,7 +175,10 @@ void DeviceStatus::fetchStatus(const ebus::JsonChunkVisitor& visitor) {
 #endif
   writer.writeField("firmware", FirmwareStatus{});
   writer.writeField("chip", ChipStatus{});
-  writer.writeField("wifi", WifiStatus{});
+  {
+    auto wifi_scope = writer.objectScope("wifi");
+    appendWifiStatus(writer);
+  }
 
 #if defined(EBUS_INTERNAL)
   {
@@ -239,7 +187,10 @@ void DeviceStatus::fetchStatus(const ebus::JsonChunkVisitor& visitor) {
   }
   writer.writeField("ebus", EbusStatus{});
   writer.writeField("schedule", ScheduleStatus{});
-  writer.writeField("mqtt", MqttStatus{});
+  {
+    auto mqtt_scope = writer.objectScope("mqtt");
+    appendMqttStatus(writer, statusConfig().mqtt);
+  }
   writer.writeField("home_assistant", HaStatus{});
   writer.writeField("sockets", SocketsStatus{});
 #endif

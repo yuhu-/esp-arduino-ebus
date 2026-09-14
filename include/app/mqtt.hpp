@@ -16,6 +16,8 @@
 
 #include "app/ebus_accessor.hpp"
 #include "command.hpp"
+#include "config/app_config.hpp"
+#include "ebus/detail/json_writer.hpp"
 #include "ebus/device.hpp"
 #include "ebus/types.hpp"
 
@@ -202,4 +204,9 @@ class Mqtt {
 };
 
 extern Mqtt mqtt;
+
+// Renders the "mqtt" status section. Colocated here because it reads live
+// Mqtt state; the config slice arrives as a parameter (no new DI).
+void appendMqttStatus(ebus::detail::JsonWriter& writer,
+                      const AppConfig::Mqtt& mqtt_config);
 #endif

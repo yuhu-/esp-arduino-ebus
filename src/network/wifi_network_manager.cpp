@@ -523,3 +523,44 @@ void WifiNetworkManager::configureStaticIpIfEnabled() {
     logger.warn("Invalid static IP/netmask config, falling back to DHCP");
   }
 }
+
+void appendWifiStatus(ebus::detail::JsonWriter& writer) {
+  auto scope = writer.objectScope();
+  writer.writeField("last_connect", WifiNetworkManager::getLastConnect());
+  writer.writeField("reconnect_count", WifiNetworkManager::getReconnectCount());
+  writer.writeField("rssi", WifiNetworkManager::RSSI());
+  if (WifiNetworkManager::isStaticIpEnabled()) {
+    writer.writeField("static_ip", true);
+    writer.writeField("ip_address",
+                      WifiNetworkManager::getConfiguredIpAddress());
+    writer.writeField("gateway", WifiNetworkManager::getConfiguredGateway());
+    writer.writeField("netmask", WifiNetworkManager::getConfiguredNetmask());
+    writer.writeField("dns1", WifiNetworkManager::getConfiguredDns1());
+    writer.writeField("dns2", WifiNetworkManager::getConfiguredDns2());
+  } else {
+    esp_netif_ip_info_t staIpInfo{};
+    const bool hasStaIp = WifiNetworkManager::getStaIpInfo(&staIpInfo);
+    esp_ip4_addr_t dnsMain{}, dnsBackup{};
+    const bool hasDnsMain = WifiNetworkManager::getDnsIp(0, &dnsMain);
+    const bool hasDnsBackup = WifiNetworkManager::getDnsIp(1, &dnsBackup);
+    writer.writeField("static_ip", false);
+    writer.writeField(
+        "ip_address",
+        hasStaIp ? WifiNetworkManager::ipToString(staIpInfo.ip) : "");
+    writer.writeField(
+        "gateway",
+        hasStaIp ? WifiNetworkManager::ipToString(staIpInfo.gw) : "");
+    writer.writeField(
+        "netmask",
+        hasStaIp ? WifiNetworkManager::ipToString(staIpInfo.netmask) : "");
+    writer.writeField(
+        "dns1", hasDnsMain ? WifiNetworkManager::ipToString(dnsMain) : "");
+    writer.writeField(
+        "dns2", hasDnsBackup ? WifiNetworkManager::ipToString(dnsBackup) : "");
+  }
+  writer.writeField("ssid", WifiNetworkManager::SSID());
+  writer.writeField("bssid", WifiNetworkManager::BSSIDstr());
+  writer.writeField("channel", WifiNetworkManager::channel());
+  writer.writeField("hostname", WifiNetworkManager::getHostname());
+  writer.writeField("mac_address", WifiNetworkManager::macAddress());
+}
