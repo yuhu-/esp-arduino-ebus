@@ -17,7 +17,37 @@
 #include "system/device_status.hpp"
 #include "system/logger.hpp"
 
-Mqtt mqtt;
+Mqtt* Mqtt::instance_ = nullptr;
+
+Mqtt::Mqtt() { instance_ = this; }
+
+void Mqtt::setHaHooks(HaHooks hooks) { ha_hooks_ = std::move(hooks); }
+
+bool Mqtt::haEnabled() const {
+  return ha_hooks_.is_enabled && ha_hooks_.is_enabled();
+}
+
+void Mqtt::haPublishDeviceInfo() const {
+  if (ha_hooks_.publish_device_info) ha_hooks_.publish_device_info();
+}
+
+void Mqtt::haPublishComponents() const {
+  if (ha_hooks_.publish_components) ha_hooks_.publish_components();
+}
+
+void Mqtt::haPublishComponent(const Command* command, size_t field_idx,
+                              bool remove) const {
+  if (ha_hooks_.publish_component)
+    ha_hooks_.publish_component(command, field_idx, remove);
+}
+
+void Mqtt::haSetEnabled(bool enable) const {
+  if (ha_hooks_.set_enabled) ha_hooks_.set_enabled(enable);
+}
+
+void Mqtt::haConnected() const {
+  if (ha_hooks_.on_connected) ha_hooks_.on_connected();
+}
 
 void Mqtt::start() {
   std::lock_guard<std::recursive_mutex> lock(mqtt_mutex_);
@@ -174,19 +204,21 @@ const std::string& Mqtt::getRootTopic() const { return root_topic_; }
 const std::string& Mqtt::getWillTopic() const { return will_topic_; }
 
 void Mqtt::enqueueOutgoing(const OutgoingAction& action) {
-  if (!mqtt.enabled_ || mqtt.outgoing_queue_ == nullptr) return;
+  if (!instance_ || !instance_->enabled_ ||
+      instance_->outgoing_queue_ == nullptr)
+    return;
 
-  if (xQueueSend(mqtt.outgoing_queue_, &action, 0) != pdPASS) {
+  if (xQueueSend(instance_->outgoing_queue_, &action, 0) != pdPASS) {
     // Mimic CircularBuffer behavior: drop oldest to make room for new
     OutgoingAction dummy;
-    if (xQueueReceive(mqtt.outgoing_queue_, &dummy, 0) == pdTRUE) {
-      xQueueSend(mqtt.outgoing_queue_, &action, 0);
+    if (xQueueReceive(instance_->outgoing_queue_, &dummy, 0) == pdTRUE) {
+      xQueueSend(instance_->outgoing_queue_, &action, 0);
     }
     logger.warn("[MQTT] Outgoing queue full, dropped oldest message");
   }
 
-  size_t current = uxQueueMessagesWaiting(mqtt.outgoing_queue_);
-  ebus::updateMaxAtomic(mqtt.max_outgoing_, current);
+  size_t current = uxQueueMessagesWaiting(instance_->outgoing_queue_);
+  ebus::updateMaxAtomic(instance_->max_outgoing_, current);
 }
 
 void Mqtt::publish(const char* topic, uint8_t qos, bool retain,
@@ -218,38 +250,38 @@ void Mqtt::publishStream(
 void Mqtt::publishData(const std::string& id,
                        const std::vector<uint8_t>& master,
                        const std::vector<uint8_t>& slave) {
-  if (!mqtt.enabled_) return;
+  if (!instance_ || !instance_->enabled_) return;
   enqueueOutgoing(OutgoingAction(id, master, slave));
 }
 
 void Mqtt::publishError(const ebus::ProtocolInfo& info) {
-  if (!mqtt.enabled_) return;
+  if (!instance_ || !instance_->enabled_) return;
   enqueueOutgoing(OutgoingAction(info));
 }
 
 void Mqtt::publishValue(std::string_view key) {
-  if (!mqtt.enabled_) return;
+  if (!instance_ || !instance_->enabled_) return;
   enqueueOutgoing(
       OutgoingAction(OutgoingActionType::Update, key));  // Pass string_view
 }
 
 void Mqtt::publishDiscovery() {
-  if (!mqtt.enabled_ || !mqttha.isEnabled()) return;
+  if (!instance_ || !instance_->enabled_ || !instance_->haEnabled()) return;
   enqueueOutgoing(OutgoingAction(OutgoingActionType::Discovery, ""));
 }
 
 void Mqtt::publishComponentDiscovery() {
-  if (!mqtt.enabled_ || !mqttha.isEnabled()) return;
+  if (!instance_ || !instance_->enabled_ || !instance_->haEnabled()) return;
   enqueueOutgoing(OutgoingAction(OutgoingActionType::Components, ""));
 }
 
 void Mqtt::publishHaEnable() {
-  if (!mqtt.enabled_) return;
+  if (!instance_ || !instance_->enabled_) return;
   enqueueOutgoing(OutgoingAction(OutgoingActionType::HaEnable, ""));
 }
 
 void Mqtt::publishHaDisable() {
-  if (!mqtt.enabled_) return;
+  if (!instance_ || !instance_->enabled_) return;
   enqueueOutgoing(OutgoingAction(OutgoingActionType::HaDisable, ""));
 }
 
@@ -382,7 +414,7 @@ void Mqtt::taskFunc(void* arg) {
             if (action.command) {
               for (size_t i = 0; i < action.command->getFieldCount(); ++i) {
                 if (action.command->hasFieldHA(i)) {
-                  mqttha.publishComponent(action.command, i, action.ha_remove);
+                  self->haPublishComponent(action.command, i, action.ha_remove);
                 }
               }
             }
@@ -413,18 +445,18 @@ void Mqtt::taskFunc(void* arg) {
             self->handleValueUpdate(action.key);
             break;
           case OutgoingActionType::Discovery:
-            if (mqttha.isEnabled()) mqttha.publishDeviceInfo();
+            if (self->haEnabled()) self->haPublishDeviceInfo();
             break;
           case OutgoingActionType::Components:
-            if (mqttha.isEnabled()) mqttha.publishComponents();
+            if (self->haEnabled()) self->haPublishComponents();
             break;
           case OutgoingActionType::HaEnable:
-            mqttha.setEnabled(true);
-            mqttha.onMqttConnected();
+            self->haSetEnabled(true);
+            self->haConnected();
             break;
           case OutgoingActionType::HaDisable:
-            mqttha.onMqttConnected();  // publishes removals via !enabled_ in
-                                       // publishComponents
+            self->haConnected();  // publishes removals via !enabled_ in
+                                  // publishComponents
             break;
         }
       }
@@ -488,7 +520,7 @@ void Mqtt::eventHandler(void* handler_args, esp_event_base_t base,
           },
           false);
 
-      mqttha.onMqttConnected();
+      self->haConnected();
     } break;
     case MQTT_EVENT_DISCONNECTED: {
       logger.debug("[MQTT] disconnected");
@@ -786,10 +818,12 @@ void Mqtt::publishResponse(std::string_view id, std::string_view status,
 
 void appendMqttStatus(ebus::detail::JsonWriter& w,
                       const AppConfig::Mqtt& mqtt_config) {
-  w.writeField("enabled", mqtt.isEnabled());
+  w.writeField("enabled",
+               Mqtt::instance_ != nullptr && Mqtt::instance_->isEnabled());
   w.writeField("server", mqtt_config.server.c_str());
   w.writeField("user", mqtt_config.user.c_str());
-  w.writeField("connected", mqtt.isConnected());
+  w.writeField("connected",
+               Mqtt::instance_ != nullptr && Mqtt::instance_->isConnected());
 }
 
 #endif

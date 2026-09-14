@@ -38,6 +38,8 @@ uint32_t DeviceStatus::reset_code_ = 0;
 EspOtaManager* DeviceStatus::esp_ota_manager_ = nullptr;
 #if defined(EBUS_INTERNAL)
 SystemMonitor* DeviceStatus::monitor_ = nullptr;
+Mqtt* DeviceStatus::mqtt_ = nullptr;
+MqttHA* DeviceStatus::mqtt_ha_ = nullptr;
 #endif
 
 namespace {
@@ -141,7 +143,7 @@ struct ScheduleStatus {
 struct HaStatus {
   static void toJson(ebus::detail::JsonWriter& w) {
     auto obj_scope = w.objectScope();
-    w.writeField("enabled", mqttha.isEnabled());
+    w.writeField("enabled", DeviceStatus::mqttHa().isEnabled());
   }
 };
 
@@ -178,6 +180,14 @@ EspOtaManager& DeviceStatus::espOtaManager() { return *esp_ota_manager_; }
 void DeviceStatus::setMonitor(SystemMonitor* monitor) { monitor_ = monitor; }
 
 SystemMonitor& DeviceStatus::monitor() { return *monitor_; }
+
+void DeviceStatus::setMqtt(Mqtt* mqtt) { mqtt_ = mqtt; }
+
+Mqtt& DeviceStatus::mqtt() { return *mqtt_; }
+
+void DeviceStatus::setMqttHa(MqttHA* mqtt_ha) { mqtt_ha_ = mqtt_ha; }
+
+MqttHA& DeviceStatus::mqttHa() { return *mqtt_ha_; }
 #endif
 
 void DeviceStatus::fetchStatus(const ebus::JsonChunkVisitor& visitor) {
@@ -230,7 +240,8 @@ void DeviceStatus::fetchAppStatus(const ebus::JsonChunkVisitor& visitor) {
   writer.appendKey("threads");
   {
     auto array = writer.arrayScope();
-    addThread("mqtt", mqtt.getTaskHandle(), app::limits::Task::mqtt_stack);
+    addThread("mqtt", DeviceStatus::mqtt().getTaskHandle(),
+              app::limits::Task::mqtt_stack);
     addThread("cron", cron.getTaskHandle(), app::limits::Task::cron_stack);
     addThread("logger", logger.getTaskHandle(),
               app::limits::Task::logger_stack);
@@ -252,9 +263,9 @@ void DeviceStatus::fetchAppStatus(const ebus::JsonChunkVisitor& visitor) {
       writer.writeValue(qs);
     };
 
-    addQueue("mqtt_out", mqtt.getOutgoingQueueSize(),
-             mqtt.getOutgoingQueueCapacity(),
-             mqtt.getOutgoingQueueHighWatermark());
+    addQueue("mqtt_out", DeviceStatus::mqtt().getOutgoingQueueSize(),
+             DeviceStatus::mqtt().getOutgoingQueueCapacity(),
+             DeviceStatus::mqtt().getOutgoingQueueHighWatermark());
 
     addQueue("logger", logger.getQueueSize(), logger.getQueueCapacity(),
              logger.getQueueHighWatermark());

@@ -44,8 +44,8 @@ std::string_view evaluateCommands(ebus::detail::JsonReader& reader) {
 
 CommandsApi* CommandsApi::instance_ = nullptr;
 
-CommandsApi::CommandsApi(CommandManager& command_manager)
-    : command_manager_(command_manager) {
+CommandsApi::CommandsApi(CommandManager& command_manager, MqttHA& mqtt_ha)
+    : command_manager_(command_manager), mqtt_ha_(mqtt_ha) {
   instance_ = this;
 }
 
@@ -304,8 +304,8 @@ esp_err_t CommandsApi::handleCommandsSave(httpd_req_t* req) {
 }
 
 esp_err_t CommandsApi::handleCommandsWipe(httpd_req_t* req) {
-  if (mqttha.isEnabled()) {
-    mqttha.removeComponents();
+  if (instance_->mqtt_ha_.isEnabled()) {
+    instance_->mqtt_ha_.removeComponents();
   }
   int64_t bytes = instance_->command_manager_.wipeCommands();
   if (bytes > 0) {

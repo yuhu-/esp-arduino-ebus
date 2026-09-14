@@ -7,7 +7,6 @@
 #include <string>
 
 #include "app/command_manager.hpp"
-#include "app/mqtt.hpp"
 
 // clang-format off
 namespace {
@@ -40,8 +39,6 @@ inline constexpr size_t max_lower_buf_length = 64;      // Lowercase conversion 
 } // namespace mqtt_ha_buffer_limits
 } // namespace
 // clang-format on
-
-MqttHA mqttha;
 
 namespace {
 void formatPrettyName(std::string_view sv, char* out, size_t max_len) {
@@ -94,6 +91,10 @@ void MqttHA::setEnabled(const bool enable) { enabled_ = enable; }
 
 bool MqttHA::isEnabled() const { return enabled_; }
 
+void MqttHA::setTransport(Transport transport) {
+  transport_ = std::move(transport);
+}
+
 void MqttHA::setThingName(const std::string& name) { thing_name_ = name; }
 
 void MqttHA::setThingModel(const std::string& model) { thing_model_ = model; }
@@ -135,7 +136,7 @@ void MqttHA::publishDeviceInfo() const {
              component, device_identifiers_.c_str(), object_id_buf);
 
     if (!enabled_) {
-      mqtt.publish(topic_buf, 0, true, "", false);
+      if (transport_.publish) transport_.publish(topic_buf, 0, true, "", false);
       return;
     }
 
@@ -143,7 +144,8 @@ void MqttHA::publishDeviceInfo() const {
     snprintf(uid_buf, sizeof(uid_buf), "%s_%s", device_identifiers_.c_str(),
              key);
 
-    mqtt.publishStream(
+    if (!transport_.publish_stream) return;
+    transport_.publish_stream(
         topic_buf, 0, true,
         [&](const ebus::JsonChunkVisitor& v) {
           ebus::detail::JsonWriter writer(v);
@@ -381,7 +383,7 @@ void MqttHA::publishComponent(const Command* command, size_t field_idx,
   if (tlen <= 0 || (size_t)tlen >= sizeof(topic_buf)) return;
 
   if (remove || !enabled_) {
-    mqtt.publish(topic_buf, 0, true, "", false);
+    if (transport_.publish) transport_.publish(topic_buf, 0, true, "", false);
     return;
   }
 
@@ -391,7 +393,8 @@ void MqttHA::publishComponent(const Command* command, size_t field_idx,
 
   char value_template_buf[mqtt_ha_buffer_limits::max_value_template_length];
 
-  mqtt.publishStream(
+  if (!transport_.publish_stream) return;
+  transport_.publish_stream(
       topic_buf, 0, true,
       [&](const ebus::JsonChunkVisitor& v) {
         ebus::detail::JsonWriter writer(v);

@@ -88,7 +88,11 @@ bool RegisterUri(const char* uri, httpd_method_t method,
   return HttpUtils::registerRoute(configServer, uri, method, handler);
 }
 
+#if defined(EBUS_INTERNAL)
+void SetupHttpHandlers(MqttHA& mqtt_ha) {
+#else
 void SetupHttpHandlers() {
+#endif
   if (configServer != nullptr) return;
 
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
@@ -121,7 +125,7 @@ void SetupHttpHandlers() {
   adc_api.registerHandlers(configServer);
 
 #if defined(EBUS_INTERNAL)
-  static CommandsApi commands_api(commandManager);
+  static CommandsApi commands_api(commandManager, mqtt_ha);
   commands_api.registerHandlers(configServer);
 
   static CronApi cron_api(cron);

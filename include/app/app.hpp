@@ -3,6 +3,8 @@
 #include <string>
 #include <string_view>
 
+#include "app/mqtt.hpp"
+#include "app/mqtt_ha.hpp"
 #include "config/app_config.hpp"
 
 #if defined(EBUS_INTERNAL)
@@ -47,6 +49,8 @@ class App {
   UpgradeManager upgrade_manager_;
   EspOtaManager esp_ota_manager_;
 #if defined(EBUS_INTERNAL)
+  Mqtt mqtt_;
+  MqttHA mqtt_ha_;
   SystemMonitor monitor_;
 #endif
 
@@ -58,6 +62,11 @@ class App {
   bool initServices();
   bool initHttp();
   bool startTasks();
+
+#if defined(EBUS_INTERNAL)
+  // WiFi STA-IP callback trampoline (C function pointer → member).
+  void onStaIpAssigned(const std::string& ipAddress);
+#endif
 
   ConfigManager& config_manager_;
   AppConfig config_;

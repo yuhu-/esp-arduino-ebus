@@ -1,10 +1,12 @@
 #pragma once
 
 #if defined(EBUS_INTERNAL)
+#include <functional>
 #include <string>
 
 #include "app/command.hpp"
 #include "app/ha_profile.hpp"
+#include "ebus/types.hpp"
 
 // clang-format off
 namespace mqtt_ha_limits {
@@ -36,6 +38,20 @@ class MqttHA {
   void setThingHwVersion(const std::string& hwVersion);
   void setThingConfigurationUrl(const std::string& configurationUrl);
 
+  // Transport toward the broker, injected by App (MqttHA owns no socket).
+  // Unset callbacks silently drop publishes.
+  struct Transport {
+    std::function<void(const char* topic, uint8_t qos, bool retain,
+                       const char* payload, bool prefix)>
+        publish;
+    std::function<void(
+        const char* topic, uint8_t qos, bool retain,
+        const std::function<void(const ebus::JsonChunkVisitor&)>& builder,
+        bool prefix)>
+        publish_stream;
+  };
+  void setTransport(Transport transport);
+
   void publishDeviceInfo() const;
 
   void publishComponent(const Command* command, size_t field_idx,
@@ -55,6 +71,7 @@ class MqttHA {
   void onMqttConnected() const;
 
  private:
+  Transport transport_;
   std::string unique_id_;           // e.g. "8406ac"
   std::string device_identifiers_;  // e.g. "ebus8406ac"
   std::string root_topic_;          // e.g. "ebus8406ac/"
@@ -96,6 +113,4 @@ class MqttHA {
   static float getFieldMin(const Command* command, size_t field_idx);
   static float getFieldMax(const Command* command, size_t field_idx);
 };
-
-extern MqttHA mqttha;
 #endif

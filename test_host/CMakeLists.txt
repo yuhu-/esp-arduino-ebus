@@ -30,7 +30,6 @@ set(APP_SOURCES
     ${PROJECT_ROOT}/src/app/mqtt_ha.cpp
     ${PROJECT_ROOT}/src/system/string_pool.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/mocks/logger.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/mocks/mqtt_mock.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/mocks/nvs_mock.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/mocks/http_stubs.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/mocks/app_stub.cpp

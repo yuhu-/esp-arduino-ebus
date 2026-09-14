@@ -91,6 +91,19 @@ bool App::initNetwork() {
   return true;
 }
 
+#if defined(EBUS_INTERNAL)
+void App::onStaIpAssigned(const std::string& ipAddress) {
+  if (ipAddress.empty()) return;
+
+  mqtt_ha_.setThingConfigurationUrl("http://" + ipAddress + "/");
+
+  if (mqtt_ha_.isEnabled()) {
+    Mqtt::publishDiscovery();
+    Mqtt::publishComponentDiscovery();
+  }
+}
+#endif
+
 bool App::initServices() {
   set_pwm(config_.pwm.value);
 #if defined(EBUS_INTERNAL) && defined(PWM_PIN)
@@ -104,35 +117,50 @@ bool App::initServices() {
   }
 
   const AppConfig::Mqtt& mqtt_config = config_.mqtt;
-  mqtt.setEnabled(mqtt_config.enabled);
-  mqtt.setup(getUniqueId());
-  mqtt.setServer(mqtt_config.server.c_str(), 1883);
-  mqtt.setCredentials(mqtt_config.user.c_str(), mqtt_config.pass.c_str());
+  mqtt_.setEnabled(mqtt_config.enabled);
+  mqtt_.setup(getUniqueId());
+  mqtt_.setServer(mqtt_config.server.c_str(), 1883);
+  mqtt_.setCredentials(mqtt_config.user.c_str(), mqtt_config.pass.c_str());
   if (!mqtt_config.root_topic.empty()) {
-    mqtt.setRootTopic(std::string(mqtt_config.root_topic.c_str()));
+    mqtt_.setRootTopic(std::string(mqtt_config.root_topic.c_str()));
   }
-  mqtt.start();
-  mqtt.setStatusProvider(DeviceStatus::fetchStatus);
+  mqtt_.start();
+  mqtt_.setStatusProvider(DeviceStatus::fetchStatus);
 
-  mqttha.setUniqueId(mqtt.getUniqueId());
-  mqttha.setRootTopic(mqtt.getRootTopic());
-  mqttha.setWillTopic(mqtt.getWillTopic());
-  mqttha.setEnabled(config_.mqtt_ha.enabled);
+  mqtt_ha_.setUniqueId(mqtt_.getUniqueId());
+  mqtt_ha_.setRootTopic(mqtt_.getRootTopic());
+  mqtt_ha_.setWillTopic(mqtt_.getWillTopic());
+  mqtt_ha_.setEnabled(config_.mqtt_ha.enabled);
 
-  mqttha.setThingName(std::string(config_.mqtt_ha.thing_name.c_str()));
-  mqttha.setThingHwVersion(getAdapterHwVersionString());
-  mqttha.setThingModel("esp-eBus Adapter");
-  mqttha.setThingModelId("esp-ebus-adapter");
+  mqtt_ha_.setThingName(std::string(config_.mqtt_ha.thing_name.c_str()));
+  mqtt_ha_.setThingHwVersion(getAdapterHwVersionString());
+  mqtt_ha_.setThingModel("esp-eBus Adapter");
+  mqtt_ha_.setThingModelId("esp-ebus-adapter");
+
+  // Wire the two directions explicitly: HA publishes through MQTT transport,
+  // MQTT consults HA hooks. No globals in either direction.
+  mqtt_ha_.setTransport(
+      {[this](const char* topic, uint8_t qos, bool retain, const char* payload,
+              bool prefix) {
+         mqtt_.publish(topic, qos, retain, payload, prefix);
+       },
+       [this](const char* topic, uint8_t qos, bool retain,
+              const std::function<void(const ebus::JsonChunkVisitor&)>& builder,
+              bool prefix) {
+         mqtt_.publishStream(topic, qos, retain, builder, prefix);
+       }});
+  mqtt_.setHaHooks(
+      {[this]() { return mqtt_ha_.isEnabled(); },
+       [this](bool enable) { mqtt_ha_.setEnabled(enable); },
+       [this]() { mqtt_ha_.publishDeviceInfo(); },
+       [this]() { mqtt_ha_.publishComponents(); },
+       [this](const Command* command, size_t field_idx, bool remove) {
+         mqtt_ha_.publishComponent(command, field_idx, remove);
+       },
+       [this]() { mqtt_ha_.onMqttConnected(); }});
   WifiNetworkManager::setStaIpAssignedCallback(
       [](const std::string& ipAddress) {
-        if (ipAddress.empty()) return;
-
-        mqttha.setThingConfigurationUrl("http://" + ipAddress + "/");
-
-        if (mqttha.isEnabled()) {
-          Mqtt::publishDiscovery();
-          Mqtt::publishComponentDiscovery();
-        }
+        if (App* app = App::instance()) app->onStaIpAssigned(ipAddress);
       });
 #endif
 
@@ -266,6 +294,8 @@ bool App::initServices() {
   monitor_.begin();
   DeviceStatus::setMonitor(&monitor_);
   DeviceStatus::setEspOtaManager(&esp_ota_manager_);
+  DeviceStatus::setMqtt(&mqtt_);
+  DeviceStatus::setMqttHa(&mqtt_ha_);
 
   commandManager.setDataUpdatedCallback(Mqtt::publishValue);
 
@@ -274,7 +304,7 @@ bool App::initServices() {
 
   // Setup lifecycle listeners to keep ebusController in sync with the
   // CommandManager
-  commandManager.setCommandChangedCallback([](Command* cmd) {
+  commandManager.setCommandChangedCallback([this](Command* cmd) {
     // Remove existing poll item if it was already registered
     if (cmd->getPollId() != 0) {
       char log_buf[128];
@@ -306,7 +336,7 @@ bool App::initServices() {
       logger.info(log_buf);
     }
     // HA: publish components for this command if HA enabled and MQTT connected
-    if (mqttha.isEnabled()) {
+    if (mqtt_ha_.isEnabled()) {
       for (size_t i = 0; i < cmd->getFieldCount(); ++i) {
         if (cmd->hasFieldHA(i)) {
           Mqtt::enqueueOutgoing(OutgoingAction(cmd, i, false));
@@ -315,13 +345,13 @@ bool App::initServices() {
     }
   });
 
-  commandManager.setCommandRemovedCallback([](Command* cmd) {
+  commandManager.setCommandRemovedCallback([this](Command* cmd) {
     if (cmd->getPollId() != 0) {
       getEbusController().removePollItem(cmd->getPollId());
       cmd->setPollId(0);
     }
-    if (mqttha.isEnabled()) {
-      mqttha.removeComponent(cmd);
+    if (mqtt_ha_.isEnabled()) {
+      mqtt_ha_.removeComponent(cmd);
     }
   });
 
@@ -350,7 +380,11 @@ bool App::initServices() {
 }
 
 bool App::initHttp() {
+#if defined(EBUS_INTERNAL)
+  SetupHttpHandlers(mqtt_ha_);
+#else
   SetupHttpHandlers();
+#endif
   HttpUtils::setCustomHeaders(std::string(config_.http.headers.c_str()));
   upgrade_manager_.begin();
   SetupHttpFallbackHandlers();
@@ -361,7 +395,7 @@ bool App::initHttp() {
 
 bool App::startTasks() {
 #if defined(EBUS_INTERNAL)
-  mqtt.startTask();
+  mqtt_.startTask();
   return true;
 #else
   if (!startClientRuntime()) {
@@ -421,7 +455,7 @@ void App::stop() {
   // CRITICAL: Stop MQTT first and wait for task to fully exit
   // This prevents the MQTT task from accessing eBUS/Cron/SystemMonitor
   // resources while they are being stopped
-  mqtt.stopTask();
+  mqtt_.stopTask();
 
   // Now safe to stop other components
   cron.stop();

@@ -89,7 +89,23 @@ struct OutgoingAction {
 
 class Mqtt {
  public:
-  Mqtt() = default;
+  Mqtt();
+
+  // Dispatch pointer for the static publish facades below (house pattern:
+  // the single instance is owned by App).
+  static Mqtt* instance_;
+
+  // Home Assistant hooks, injected by App. Mqtt owns no HA logic; unset
+  // hooks silently skip HA work.
+  struct HaHooks {
+    std::function<bool()> is_enabled;
+    std::function<void(bool)> set_enabled;
+    std::function<void()> publish_device_info;
+    std::function<void()> publish_components;
+    std::function<void(const Command*, size_t, bool)> publish_component;
+    std::function<void()> on_connected;
+  };
+  void setHaHooks(HaHooks hooks);
 
   void start();
   void change();
@@ -201,9 +217,19 @@ class Mqtt {
 
   void publishResponse(std::string_view id, std::string_view status,
                        size_t bytes = 0);
-};
 
-extern Mqtt mqtt;
+  // Null-safe Home Assistant hook dispatchers (unset hooks skip silently).
+  bool haEnabled() const;
+  void haPublishDeviceInfo() const;
+  void haPublishComponents() const;
+  void haPublishComponent(const Command* command, size_t field_idx,
+                          bool remove) const;
+  void haSetEnabled(bool enable) const;
+  void haConnected() const;
+
+ private:
+  HaHooks ha_hooks_;
+};
 
 // Renders the "mqtt" status section. Colocated here because it reads live
 // Mqtt state; the config slice arrives as a parameter (no new DI).
