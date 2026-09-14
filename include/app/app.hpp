@@ -5,6 +5,10 @@
 
 #include "config/app_config.hpp"
 
+#if defined(EBUS_INTERNAL)
+#include "system/system_monitor.hpp"
+#endif
+
 class ConfigManager;
 
 class App {
@@ -37,6 +41,10 @@ class App {
 
  private:
   static App* instance_;
+
+#if defined(EBUS_INTERNAL)
+  SystemMonitor monitor_;
+#endif
 
   // Init phases, executed in order by begin(). Each phase owns one slice of
   // the former app_main inline sequence; begin() short-circuits on failure.

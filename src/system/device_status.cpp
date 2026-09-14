@@ -24,7 +24,7 @@
 #include "network/wifi_network_manager.hpp"
 #include "system/adapter_version.hpp"
 #include "system/device_identity.hpp"
-#include "system_monitor.hpp"
+#include "system/system_monitor.hpp"
 
 #if !defined(EBUS_INTERNAL)
 #include "legacy/bus_type.hpp"
@@ -35,6 +35,9 @@
 
 const AppConfig* DeviceStatus::config_ = nullptr;
 uint32_t DeviceStatus::reset_code_ = 0;
+#if defined(EBUS_INTERNAL)
+SystemMonitor* DeviceStatus::monitor_ = nullptr;
+#endif
 
 namespace {
 
@@ -146,7 +149,7 @@ struct SocketsStatus {
     auto obj_scope = w.objectScope();
     int detected = 0;
     int connected = 0;
-    SystemMonitor::getSocketStatus(detected, connected);
+    DeviceStatus::monitor().getSocketStatus(detected, connected);
     w.writeField("detected", detected);
     w.writeField("connected", connected);
     w.writeField("max", CONFIG_LWIP_MAX_SOCKETS);
@@ -163,6 +166,12 @@ void DeviceStatus::setResetCode(uint32_t code) { reset_code_ = code; }
 const AppConfig& DeviceStatus::config() { return *config_; }
 
 uint32_t DeviceStatus::resetCode() { return reset_code_; }
+
+#if defined(EBUS_INTERNAL)
+void DeviceStatus::setMonitor(SystemMonitor* monitor) { monitor_ = monitor; }
+
+SystemMonitor& DeviceStatus::monitor() { return *monitor_; }
+#endif
 
 void DeviceStatus::fetchStatus(const ebus::JsonChunkVisitor& visitor) {
   ebus::detail::JsonWriter writer(visitor);
@@ -223,7 +232,7 @@ void DeviceStatus::fetchAppStatus(const ebus::JsonChunkVisitor& visitor) {
               app::limits::Task::espota_stack);
     addThread("status_led", WifiNetworkManager::getStatusLedTaskHandle(),
               app::limits::Task::status_led_stack);
-    addThread("system_monitor", SystemMonitor::task_handle(),
+    addThread("system_monitor", DeviceStatus::monitor().task_handle(),
               app::limits::Task::system_monitor_stack);
   }
 
@@ -243,13 +252,14 @@ void DeviceStatus::fetchAppStatus(const ebus::JsonChunkVisitor& visitor) {
     addQueue("logger", logger.getQueueSize(), logger.getQueueCapacity(),
              logger.getQueueHighWatermark());
 
-    addQueue("system_monitor_log", SystemMonitor::getLogQueueSize(),
-             SystemMonitor::getLogQueueCapacity(),
-             SystemMonitor::getLogQueueHighWatermark());
+    addQueue("system_monitor_log", DeviceStatus::monitor().getLogQueueSize(),
+             DeviceStatus::monitor().getLogQueueCapacity(),
+             DeviceStatus::monitor().getLogQueueHighWatermark());
 
-    addQueue("system_monitor_protocol", SystemMonitor::getProtocolQueueSize(),
-             SystemMonitor::getProtocolQueueCapacity(),
-             SystemMonitor::getProtocolQueueHighWatermark());
+    addQueue("system_monitor_protocol",
+             DeviceStatus::monitor().getProtocolQueueSize(),
+             DeviceStatus::monitor().getProtocolQueueCapacity(),
+             DeviceStatus::monitor().getProtocolQueueHighWatermark());
   }
 }
 #endif

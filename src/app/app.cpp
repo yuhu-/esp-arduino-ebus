@@ -28,7 +28,7 @@
 #include "app/ebus_accessor.hpp"
 #include "app/mqtt.hpp"
 #include "app/mqtt_ha.hpp"
-#include "system_monitor.hpp"
+#include "system/system_monitor.hpp"
 #else
 #include "legacy/bus_type.hpp"
 #include "legacy/client.hpp"
@@ -237,20 +237,21 @@ bool App::initServices() {
   }
 
   // Optimized callbacks: Avoid heap-heavy JSON work inside library threads
-  getEbusController().setProtocolCallback([](const ebus::ProtocolInfo& info) {
-    char buf[128];
-    if (info.is_error)
-      snprintf(buf, sizeof(buf), "%s / %s -> '%s'",
-               ebus::toString(info.master_view).c_str(),
-               ebus::toString(info.slave_view).c_str(),
-               ebus::toString(info.protocol_error));
-    else
-      snprintf(buf, sizeof(buf), "%s / %s",
-               ebus::toString(info.master_view).c_str(),
-               ebus::toString(info.slave_view).c_str());
-    logger.info(buf, false, info.session_id, info.poll_id);
-    SystemMonitor::enqueueProtocolInfo(info);
-  });
+  getEbusController().setProtocolCallback(
+      [this](const ebus::ProtocolInfo& info) {
+        char buf[128];
+        if (info.is_error)
+          snprintf(buf, sizeof(buf), "%s / %s -> '%s'",
+                   ebus::toString(info.master_view).c_str(),
+                   ebus::toString(info.slave_view).c_str(),
+                   ebus::toString(info.protocol_error));
+        else
+          snprintf(buf, sizeof(buf), "%s / %s",
+                   ebus::toString(info.master_view).c_str(),
+                   ebus::toString(info.slave_view).c_str());
+        logger.info(buf, false, info.session_id, info.poll_id);
+        monitor_.enqueueProtocolInfo(info);
+      });
 
   // getEbusController().setTraceCallback([](const ebus::BusEventInfo& info) {
   //   logger.debug(ebus::toJson(info, 256));
@@ -262,12 +263,13 @@ bool App::initServices() {
   startEbusSimulation();
 #endif
 
-  SystemMonitor::begin();
+  monitor_.begin();
+  DeviceStatus::setMonitor(&monitor_);
 
   commandManager.setDataUpdatedCallback(Mqtt::publishValue);
 
   commandManager.setDataUpdatedLogCallback(
-      [](std::string_view key) { SystemMonitor::enqueueLogRequest(key); });
+      [this](std::string_view key) { monitor_.enqueueLogRequest(key); });
 
   // Setup lifecycle listeners to keep ebusController in sync with the
   // CommandManager
@@ -423,7 +425,7 @@ void App::stop() {
   // Now safe to stop other components
   cron.stop();
   stopEbus();
-  SystemMonitor::stop();
+  monitor_.stop();
 
   vTaskDelay(pdMS_TO_TICKS(500));
 #else

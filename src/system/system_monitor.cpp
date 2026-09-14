@@ -1,5 +1,5 @@
 #if defined(EBUS_INTERNAL)
-#include "system_monitor.hpp"
+#include "system/system_monitor.hpp"
 
 #include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
@@ -31,7 +31,9 @@ struct ProtocolInfoItem {
   ebus::StaticSequence<64> slave;
 };
 
-// Static storage for queues
+// Static queue storage (shared, .bss): kept out of the instance on purpose —
+// SystemMonitor instances live on constrained task stacks, and a second
+// instance never exists (single ownership by App).
 static uint8_t log_queue_storage[log_queue_size * sizeof(LogRequestItem)];
 static StaticQueue_t log_queue_cb;
 static uint8_t
@@ -39,14 +41,6 @@ static uint8_t
 static StaticQueue_t protocol_queue_cb;
 
 }  // namespace
-
-SystemMonitor::Status SystemMonitor::status_ = {};
-portMUX_TYPE SystemMonitor::status_mux_ = {};
-std::atomic<int> SystemMonitor::sockets_detected_{0};
-std::atomic<int> SystemMonitor::sockets_connected_{0};
-TaskHandle_t SystemMonitor::task_handle_ = nullptr;
-QueueHandle_t SystemMonitor::log_queue_ = nullptr;
-QueueHandle_t SystemMonitor::protocol_queue_ = nullptr;
 
 TaskHandle_t SystemMonitor::task_handle() { return task_handle_; }
 
@@ -72,7 +66,7 @@ bool SystemMonitor::begin() {
 
   BaseType_t result = xTaskCreate(
       taskEntry, "system_monitor", app::limits::Task::system_monitor_stack,
-      nullptr, app::limits::Task::system_monitor_priority, &task_handle_);
+      this, app::limits::Task::system_monitor_priority, &task_handle_);
   return result == pdPASS;
 }
 
@@ -162,8 +156,7 @@ void SystemMonitor::getSocketStatus(int& detected, int& connected) {
 }
 
 void SystemMonitor::taskEntry(void* arg) {
-  (void)arg;
-  taskLoop();
+  static_cast<SystemMonitor*>(arg)->taskLoop();
 }
 
 void SystemMonitor::taskLoop() {

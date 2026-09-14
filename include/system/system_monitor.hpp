@@ -3,10 +3,10 @@
 #if defined(EBUS_INTERNAL)
 
 #include <freertos/FreeRTOS.h>
-#include <freertos/portmacro.h>
 #include <freertos/queue.h>
 #include <freertos/task.h>
 
+#include <atomic>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -14,6 +14,10 @@
 #include "app/command.hpp"
 #include "ebus/callbacks.hpp"
 
+// System health monitor: drains log/protocol queues fed by ebus library
+// threads and reports heap, socket and task telemetry.
+// Instance owned by App; all methods are thread-safe (called from the
+// reactor, HTTP and main tasks).
 class SystemMonitor {
  public:
   struct Status {
@@ -25,43 +29,43 @@ class SystemMonitor {
     int sockets_connected;
   };
 
-  static TaskHandle_t task_handle();
+  TaskHandle_t task_handle();
 
-  static bool begin();
-  static void stop();
+  bool begin();
+  void stop();
 
-  static void enqueueLogRequest(std::string_view key);
-  static void enqueueProtocolInfo(const ebus::ProtocolInfo& info);
+  void enqueueLogRequest(std::string_view key);
+  void enqueueProtocolInfo(const ebus::ProtocolInfo& info);
 
-  static size_t getLogQueueSize();
-  static size_t getLogQueueCapacity();
-  static size_t getLogQueueHighWatermark();
+  size_t getLogQueueSize();
+  size_t getLogQueueCapacity();
+  size_t getLogQueueHighWatermark();
 
-  static size_t getProtocolQueueSize();
-  static size_t getProtocolQueueCapacity();
-  static size_t getProtocolQueueHighWatermark();
+  size_t getProtocolQueueSize();
+  size_t getProtocolQueueCapacity();
+  size_t getProtocolQueueHighWatermark();
 
-  static void getSocketStatus(int& detected, int& connected);
+  void getSocketStatus(int& detected, int& connected);
 
  private:
   static void taskEntry(void* arg);
-  static void taskLoop();
+  void taskLoop();
 
-  static void processLogRequests();
-  static void processProtocolInfo();
+  void processLogRequests();
+  void processProtocolInfo();
 
-  static Status getStatus();
-  static void collectStatus();
-  static void logSummary();
+  Status getStatus();
+  void collectStatus();
+  void logSummary();
 
-  static TaskHandle_t task_handle_;
-  static QueueHandle_t log_queue_;
-  static QueueHandle_t protocol_queue_;
+  TaskHandle_t task_handle_ = nullptr;
+  QueueHandle_t log_queue_ = nullptr;
+  QueueHandle_t protocol_queue_ = nullptr;
 
-  static Status status_;
-  static portMUX_TYPE status_mux_;
-  static std::atomic<int> sockets_detected_;
-  static std::atomic<int> sockets_connected_;
+  Status status_{};
+  portMUX_TYPE status_mux_ = portMUX_INITIALIZER_UNLOCKED;
+  std::atomic<int> sockets_detected_{0};
+  std::atomic<int> sockets_connected_{0};
 };
 
 #endif
