@@ -25,9 +25,9 @@
 #if defined(EBUS_INTERNAL)
 #include "app/cron.hpp"
 #include "app/ebus_accessor.hpp"
+#include "app/mqtt.hpp"
+#include "app/mqtt_ha.hpp"
 #include "command_manager.hpp"
-#include "mqtt.hpp"
-#include "mqtt_ha.hpp"
 #include "system_monitor.hpp"
 #else
 #include "legacy/bus_type.hpp"

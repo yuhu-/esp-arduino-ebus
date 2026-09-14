@@ -27,7 +27,7 @@ set(APP_SOURCES
     ${PROJECT_ROOT}/src/app/ebus_accessor.cpp
     ${PROJECT_ROOT}/src/data_profile.cpp
     ${PROJECT_ROOT}/src/ha_profile.cpp
-    ${PROJECT_ROOT}/src/mqtt_ha.cpp
+    ${PROJECT_ROOT}/src/app/mqtt_ha.cpp
     ${PROJECT_ROOT}/src/string_pool.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/mocks/logger.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/mocks/mqtt_mock.cpp

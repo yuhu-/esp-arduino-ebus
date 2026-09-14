@@ -1,11 +1,12 @@
 #if defined(EBUS_INTERNAL)
+#include "app/mqtt_ha.hpp"
+
 #include <algorithm>
 #include <cstring>
 #include <ebus/detail/json_writer.hpp>
-#include <mqtt.hpp>
-#include <mqtt_ha.hpp>
 #include <string>
 
+#include "app/mqtt.hpp"
 #include "command_manager.hpp"
 
 // clang-format off

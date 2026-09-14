@@ -1,10 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 #include <string>
 
+#include "app/mqtt.hpp"
+#include "app/mqtt_ha.hpp"
 #include "command.hpp"
 #include "command_manager.hpp"
-#include "mqtt.hpp"
-#include "mqtt_ha.hpp"
 
 namespace {
 

@@ -16,8 +16,8 @@
 #include <ebus/detail/protocol_limits.hpp>
 #include <limits>
 
+#include "app/mqtt.hpp"
 #include "logger.hpp"
-#include "mqtt.hpp"
 
 CommandManager commandManager;
 

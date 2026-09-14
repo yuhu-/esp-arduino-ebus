@@ -1,6 +1,9 @@
 #pragma once
 
 // Mock Mqtt for host testing - no ESP-IDF dependency.
+// MIRROR of test_host/mocks/mqtt.hpp: quoted #include "app/mqtt.hpp" must
+// resolve to this mock on host (mocks/ precedes include/ on the host include
+// path) and to the real header on device. Keep both files in sync.
 // Static API matches historical usage; the recording instance API lets tests
 // assert what MqttHA would publish without a broker.
 

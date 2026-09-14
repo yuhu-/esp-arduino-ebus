@@ -11,9 +11,9 @@
 #include <cstring>
 
 #include "app/app_limits.hpp"
+#include "app/mqtt.hpp"
 #include "command_manager.hpp"
 #include "logger.hpp"
-#include "mqtt.hpp"
 
 namespace {
 constexpr uint32_t system_monitor_period_ms = 30000;

@@ -13,12 +13,12 @@
 #include <ebus/status.hpp>
 
 #include "app/app_limits.hpp"
+#include "app/mqtt.hpp"
+#include "app/mqtt_ha.hpp"
 #include "config/app_config.hpp"
 #include "esp_ota_manager.hpp"
 #include "logger.hpp"
 #include "main.hpp"
-#include "mqtt.hpp"
-#include "mqtt_ha.hpp"
 #include "network/captive_dns.hpp"
 #include "network/sntp.hpp"
 #include "network/wifi_network_manager.hpp"

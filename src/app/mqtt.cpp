@@ -1,5 +1,5 @@
 #if defined(EBUS_INTERNAL)
-#include "mqtt.hpp"
+#include "app/mqtt.hpp"
 
 #include <esp_timer.h>
 #include <freertos/task.h>
@@ -8,13 +8,13 @@
 
 #include "app/app_limits.hpp"
 #include "app/ebus_accessor.hpp"
+#include "app/mqtt_ha.hpp"
 #include "command_manager.hpp"
 #include "ebus/detail/json_reader.hpp"
 #include "ebus/detail/json_writer.hpp"  // Include for JsonWriter
 #include "ebus/status.hpp"
 #include "logger.hpp"
 #include "main.hpp"
-#include "mqtt_ha.hpp"
 #include "system/device_status.hpp"
 
 Mqtt mqtt;

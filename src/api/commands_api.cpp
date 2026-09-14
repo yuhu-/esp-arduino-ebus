@@ -4,11 +4,11 @@
 
 #include <ebus/detail/json_reader.hpp>
 
+#include "app/mqtt.hpp"
+#include "app/mqtt_ha.hpp"
 #include "command_manager.hpp"
 #include "http.hpp"
 #include "http_utils.hpp"
-#include "mqtt.hpp"
-#include "mqtt_ha.hpp"
 
 namespace {
 
