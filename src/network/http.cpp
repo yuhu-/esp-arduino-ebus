@@ -1,5 +1,6 @@
 #include "network/http.hpp"
 
+#include <esp_log.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -109,6 +110,10 @@ void SetupHttpHandlers() {
     logger.error("Failed to start HTTP server");
     return;
   }
+
+  // Receive timeouts (EAGAIN) during slow uploads are handled by the upload
+  // loops themselves; keep the component from spamming the log for them.
+  esp_log_level_set("httpd_txrx", ESP_LOG_ERROR);
 
   RegisterUri("/common.css", HTTP_GET, handleCommonCss);
   RegisterUri("/common.js", HTTP_GET, handleCommonJs);

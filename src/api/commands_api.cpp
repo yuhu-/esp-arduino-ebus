@@ -2,6 +2,12 @@
 
 #if defined(EBUS_INTERNAL)
 
+#include <esp_system.h>
+#include <esp_timer.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+
+#include <cerrno>
 #include <ebus/detail/json_reader.hpp>
 
 #include "app/command_manager.hpp"
@@ -9,6 +15,7 @@
 #include "app/mqtt_ha.hpp"
 #include "network/http.hpp"
 #include "network/http_utils.hpp"
+#include "system/logger.hpp"
 
 namespace {
 
@@ -194,18 +201,32 @@ esp_err_t CommandsApi::handleCommandsUpload(httpd_req_t* req) {
   int remaining = req->content_len;
   int total_written = 0;
 
+  // Lossy links stall mid-transfer: tolerate receive gaps up to
+  // upload_stall_budget_ms after the last byte instead of aborting on the
+  // first socket timeout. Fatal socket errors still abort immediately.
+  constexpr uint32_t upload_stall_budget_ms = 120000;
+  uint32_t last_progress_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+
   while (remaining > 0) {
     int to_read = remaining > static_cast<int>(sizeof(buffer))
                       ? static_cast<int>(sizeof(buffer))
                       : remaining;
     int received = httpd_req_recv(req, buffer, to_read);
     if (received <= 0) {
+      const uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+      if ((received == 0 || errno == EAGAIN || errno == EWOULDBLOCK ||
+           errno == EINTR) &&
+          now_ms - last_progress_ms < upload_stall_budget_ms) {
+        vTaskDelay(pdMS_TO_TICKS(100));
+        continue;
+      }
       std::fclose(file);
       std::remove(tmp_path);
       HttpUtils::sendErrorResponse(req, "500 Internal Server Error", "upload",
                                    "Receive failed");
       return ESP_OK;
     }
+    last_progress_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
     int written = std::fwrite(buffer, 1, received, file);
     if (written != received) {
       std::fclose(file);

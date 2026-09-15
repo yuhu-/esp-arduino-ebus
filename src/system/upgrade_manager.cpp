@@ -8,6 +8,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include <cerrno>
 #include <cstdio>
 #include <ebus/detail/json_reader.hpp>
 #include <ebus/detail/json_writer.hpp>
@@ -161,13 +162,27 @@ esp_err_t UpgradeManager::handleUpload(httpd_req_t* req) {
     return true;
   };
 
+  // Lossy links stall mid-transfer: tolerate receive gaps up to
+  // upload_stall_budget_ms after the last byte instead of aborting on the
+  // first socket timeout. Fatal socket errors still abort immediately.
+  constexpr uint32_t upload_stall_budget_ms = 120000;
+  uint32_t last_progress_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+
   while (remaining > 0) {
     int toRead = remaining > static_cast<int>(sizeof(buffer)) ? sizeof(buffer)
                                                               : remaining;
     int received = httpd_req_recv(req, reinterpret_cast<char*>(buffer), toRead);
     if (received <= 0) {
+      const uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+      if ((received == 0 || errno == EAGAIN || errno == EWOULDBLOCK ||
+           errno == EINTR) &&
+          now_ms - last_progress_ms < upload_stall_budget_ms) {
+        vTaskDelay(pdMS_TO_TICKS(100));
+        continue;
+      }
       return abortUpload("500 Internal Server Error", "Upload receive failed");
     }
+    last_progress_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
     remaining -= received;
 
     if (!writeOtaChunk(buffer, static_cast<size_t>(received))) {
