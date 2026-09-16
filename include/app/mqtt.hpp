@@ -29,7 +29,8 @@ enum class OutgoingActionType : uint8_t {
   Discovery,
   Components,
   HaEnable,
-  HaDisable
+  HaDisable,
+  HaConnected
 };
 
 struct OutgoingAction {

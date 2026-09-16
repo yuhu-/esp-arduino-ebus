@@ -458,6 +458,12 @@ void Mqtt::taskFunc(void* arg) {
             self->haConnected();  // publishes removals via !enabled_ in
                                   // publishComponents
             break;
+          case OutgoingActionType::HaConnected:
+            // Deferred out of IDF's event task: the full discovery storm
+            // (JSON build + sync TLS publish per component) overflows its
+            // 6KB stack. Runs here on our own task instead.
+            self->haConnected();
+            break;
         }
       }
     } else {
@@ -520,7 +526,8 @@ void Mqtt::eventHandler(void* handler_args, esp_event_base_t base,
           },
           false);
 
-      self->haConnected();
+      Mqtt::enqueueOutgoing(
+          OutgoingAction(OutgoingActionType::HaConnected, ""));
     } break;
     case MQTT_EVENT_DISCONNECTED: {
       logger.debug("[MQTT] disconnected");
