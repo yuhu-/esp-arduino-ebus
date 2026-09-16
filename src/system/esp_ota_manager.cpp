@@ -278,7 +278,7 @@ bool EspOtaManager::performTransfer(const sockaddr_in& hostAddr,
       }
     }
     char ack[16];
-    int ackLen = snprintf(ack, sizeof(ack), "%u",
+    int ackLen = snprintf(ack, sizeof(ack), "%u\n",
                           static_cast<unsigned int>(totalReceived));
     send(tcpSock, ack, ackLen, 0);
   }
@@ -304,7 +304,7 @@ bool EspOtaManager::performTransfer(const sockaddr_in& hostAddr,
 
   logger.info("ESPOTA: received " + std::to_string(totalReceived) +
               " bytes, rebooting");
-  send(tcpSock, "OK", 2, 0);
+  send(tcpSock, "OK\n", 3, 0);
   close(tcpSock);
   vTaskDelay(pdMS_TO_TICKS(1000));
   esp_restart();
