@@ -8,6 +8,7 @@
 class ConfigManager {
  public:
   static void begin();
+  static void registerHandlers();
   static void resetConfig();
   static std::string_view readString(const char* key,
                                      const char* fallback = "");

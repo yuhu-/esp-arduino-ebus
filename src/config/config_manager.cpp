@@ -268,7 +268,11 @@ esp_err_t handleConfigReset(httpd_req_t* req) {
 
 void ConfigManager::begin() {
   ensureNvsReady();
+}
 
+void ConfigManager::registerHandlers() {
+  // Requires a running HTTP server (see SetupHttpHandlers): called from
+  // App::initHttp, not from begin().
   RegisterUri("/api/v1/config", HTTP_GET, handleConfigGet);
   RegisterUri("/api/v1/config", HTTP_POST, handleConfigSet);
   RegisterUri("/api/v1/config/reset", HTTP_POST, handleConfigReset);

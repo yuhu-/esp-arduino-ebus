@@ -385,6 +385,7 @@ bool App::initHttp() {
 #else
   SetupHttpHandlers();
 #endif
+  ConfigManager::registerHandlers();
   HttpUtils::setCustomHeaders(std::string(config_.http.headers.c_str()));
   upgrade_manager_.begin();
   SetupHttpFallbackHandlers();
