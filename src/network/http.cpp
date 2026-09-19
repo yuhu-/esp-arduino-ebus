@@ -11,6 +11,7 @@
 #include "api/devices_api.hpp"
 #include "api/logs_api.hpp"
 #include "api/metrics_api.hpp"
+#include "api/network_api.hpp"
 #include "api/status_api.hpp"
 #include "api/system_api.hpp"
 #include "api/values_api.hpp"
@@ -145,6 +146,9 @@ void SetupHttpHandlers() {
 
   static MetricsApi metrics_api;
   metrics_api.registerHandlers(configServer);
+
+  static NetworkApi network_api;
+  network_api.registerHandlers(configServer);
 
   static SystemApi system_api;
   system_api.registerHandlers(configServer);
