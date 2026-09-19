@@ -12,6 +12,7 @@
 #include "api/logs_api.hpp"
 #include "api/metrics_api.hpp"
 #include "api/status_api.hpp"
+#include "api/system_api.hpp"
 #include "api/values_api.hpp"
 #include "app/command_manager.hpp"
 #include "main.hpp"
@@ -144,6 +145,9 @@ void SetupHttpHandlers() {
 
   static MetricsApi metrics_api;
   metrics_api.registerHandlers(configServer);
+
+  static SystemApi system_api;
+  system_api.registerHandlers(configServer);
 
   static LogsApi logs_api(logger);
   logs_api.registerHandlers(configServer);
