@@ -157,6 +157,18 @@ class Mqtt {
   size_t getOutgoingQueueSize() const;
   static size_t getOutgoingQueueCapacity() { return max_outgoing_queue_size; }
   size_t getOutgoingQueueHighWatermark() const;
+  uint32_t getPublishedCount() const {
+    return published_.load(std::memory_order_relaxed);
+  }
+  uint32_t getPublishFailedCount() const {
+    return publish_failed_.load(std::memory_order_relaxed);
+  }
+  uint32_t getQueueDropCount() const {
+    return queue_dropped_.load(std::memory_order_relaxed);
+  }
+  uint32_t getConnectCount() const {
+    return connects_.load(std::memory_order_relaxed);
+  }
 
  private:
   esp_mqtt_client_handle_t client_ = nullptr;
@@ -182,6 +194,10 @@ class Mqtt {
 
   QueueHandle_t outgoing_queue_ = nullptr;
   std::atomic<size_t> max_outgoing_ = 0;
+  std::atomic<uint32_t> published_ = 0;
+  std::atomic<uint32_t> publish_failed_ = 0;
+  std::atomic<uint32_t> queue_dropped_ = 0;
+  std::atomic<uint32_t> connects_ = 0;
 
   TaskHandle_t task_handle_ = nullptr;
   uint32_t last_status_publish_ = 0;

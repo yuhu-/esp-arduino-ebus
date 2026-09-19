@@ -231,6 +231,19 @@ SystemMonitor::Status SystemMonitor::getStatus() {
   return copy;
 }
 
+size_t SystemMonitor::fetchHeapTrend(HeapSample* out, size_t capacity) const {
+  if (out == nullptr || capacity == 0) return 0;
+  portENTER_CRITICAL(&status_mux_);
+  size_t n = heap_trend_count_ < capacity ? heap_trend_count_ : capacity;
+  size_t start = (heap_trend_index_ + heap_trend_capacity - heap_trend_count_) %
+                 heap_trend_capacity;
+  for (size_t i = 0; i < n; ++i) {
+    out[i] = heap_trend_[(start + i) % heap_trend_capacity];
+  }
+  portEXIT_CRITICAL(&status_mux_);
+  return n;
+}
+
 void SystemMonitor::collectStatus() {
   portENTER_CRITICAL(&status_mux_);
   status_.uptime_seconds =
@@ -240,6 +253,16 @@ void SystemMonitor::collectStatus() {
   multi_heap_info_t info;
   heap_caps_get_info(&info, MALLOC_CAP_8BIT);
   status_.largest_free_block = info.largest_free_block;
+  // Hourly trend sample (collectStatus runs every 30 s): answers
+  // leak-vs-fragmentation without polling.
+  if (++heap_trend_tick_ >= 120) {
+    heap_trend_tick_ = 0;
+    heap_trend_[heap_trend_index_] = {status_.uptime_seconds, status_.free_heap,
+                                      status_.min_free_heap,
+                                      status_.largest_free_block};
+    heap_trend_index_ = (heap_trend_index_ + 1) % heap_trend_capacity;
+    if (heap_trend_count_ < heap_trend_capacity) heap_trend_count_++;
+  }
   portEXIT_CRITICAL(&status_mux_);
 
   int detected = 0;

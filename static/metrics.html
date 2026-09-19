@@ -20,11 +20,11 @@
     <script src="common.js"></script>
     <script>
         function loadMetrics() {
-            fetchJson('/api/v1/metrics', data => renderNestedSections(data, 'metricsContainer', true, 16));
+            fetchJson('/api/v1/metrics/lib', data => renderNestedSections(data, 'metricsContainer', true, 16));
         }
         document.getElementById('btnHome').addEventListener('click', handleHome);
         document.getElementById('btnRefresh').addEventListener('click', loadMetrics);
-        document.getElementById('btnReset').addEventListener('click', () => postSimple('/api/v1/metrics/reset').then(loadMetrics));
+        document.getElementById('btnReset').addEventListener('click', () => postSimple('/api/v1/metrics/lib/reset').then(loadMetrics));
 
         // Initial load
         loadMetrics();

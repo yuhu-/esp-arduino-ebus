@@ -214,6 +214,7 @@ void Mqtt::enqueueOutgoing(const OutgoingAction& action) {
     if (xQueueReceive(instance_->outgoing_queue_, &dummy, 0) == pdTRUE) {
       xQueueSend(instance_->outgoing_queue_, &action, 0);
     }
+    instance_->queue_dropped_.fetch_add(1, std::memory_order_relaxed);
     logger.warn("[MQTT] Outgoing queue full, dropped oldest message");
   }
 
@@ -329,7 +330,10 @@ void Mqtt::internalPublish(const char* topic, uint8_t qos, bool retain,
       0) {
     // Use static strings for error logging to avoid heap churn during link
     // congestion
+    publish_failed_.fetch_add(1, std::memory_order_relaxed);
     logger.warn("[MQTT] Publish failed (buffer full or slow link)");
+  } else {
+    published_.fetch_add(1, std::memory_order_relaxed);
   }
 }
 
@@ -496,6 +500,7 @@ void Mqtt::eventHandler(void* handler_args, esp_event_base_t base,
     case MQTT_EVENT_CONNECTED: {
       logger.debug("[MQTT] connected");
       self->connected_ = true;
+      self->connects_.fetch_add(1, std::memory_order_relaxed);
       int msg_id1 = esp_mqtt_client_subscribe(self->client_,
                                               self->request_topic_.c_str(), 0);
       if (msg_id1 > 0 && self->pending_subs_count_ < self->max_pending_subs) {

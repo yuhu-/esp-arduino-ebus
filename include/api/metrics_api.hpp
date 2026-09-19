@@ -13,6 +13,7 @@ class MetricsApi {
  private:
   static esp_err_t handleMetricsPage(httpd_req_t* req);
   static esp_err_t handleMetrics(httpd_req_t* req);
+  static esp_err_t handleMetricsApp(httpd_req_t* req);
   static esp_err_t handleMetricsReset(httpd_req_t* req);
 };
 

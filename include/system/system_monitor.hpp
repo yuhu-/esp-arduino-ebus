@@ -29,6 +29,17 @@ class SystemMonitor {
     int sockets_connected;
   };
 
+  struct HeapSample {
+    uint32_t uptime_seconds = 0;
+    size_t free_bytes = 0;
+    size_t min_bytes = 0;
+    size_t largest_block = 0;
+  };
+  static constexpr size_t heap_trend_capacity = 24;
+
+  // Copies up to capacity trend samples (oldest first), returns count.
+  size_t fetchHeapTrend(HeapSample* out, size_t capacity) const;
+
   TaskHandle_t task_handle();
 
   bool begin();
@@ -66,6 +77,10 @@ class SystemMonitor {
   portMUX_TYPE status_mux_ = portMUX_INITIALIZER_UNLOCKED;
   std::atomic<int> sockets_detected_{0};
   std::atomic<int> sockets_connected_{0};
+  HeapSample heap_trend_[heap_trend_capacity] = {};
+  size_t heap_trend_index_ = 0;
+  size_t heap_trend_count_ = 0;
+  uint32_t heap_trend_tick_ = 0;
 };
 
 #endif
