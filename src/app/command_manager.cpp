@@ -277,54 +277,67 @@ int64_t CommandManager::wipeCommands() {
 
 void CommandManager::fetchCommands(
     const ebus::JsonChunkVisitor& visitor) const {
-  std::lock_guard<std::recursive_mutex> lock(mutex_);
-  ebus::detail::JsonWriter writer(visitor);
-  auto array_scope = writer.arrayScope();
-
-  size_t n = commands_.size();
-  std::array<const Command*, 64> ordered{};
-  for (size_t i = 0; i < n; i++) {
-    ordered[i] = &commands_[i];
-  }
-  std::sort(ordered.begin(), ordered.begin() + n,
-            [](const Command* a, const Command* b) {
-              return std::string_view(a->getKey()) <
-                     std::string_view(b->getKey());
-            });
-
-  for (size_t i = 0; i < n; i++) {
-    const Command* c = ordered[i];
-    auto scope = writer.objectScope();
-    writer.writeField("key", c->getKey());
-    writer.writeField("name", c->getName());
-    writer.writeHexField("read_cmd", c->getReadCmd());
-    if (c->hasWriteCmd()) {
-      writer.writeHexField("write_cmd", c->getWriteCmd(*this));
-    } else {
-      writer.writeField("write_cmd", "");
-    }
-    writer.writeField("interval", c->getInterval());
-    writer.writeField("master", c->getMaster());
-
-    auto arr = writer.arrayScope("fields");
-    for (size_t j = 0; j < c->getFieldCount(); j++) {
-      auto field_obj = writer.objectScope();
-      writer.writeField("name", c->getFieldName(j));
-      const DataProfile* p = c->getFieldProfile(j);
-      writer.writeField("profile", p ? p->name : "");
-      writer.writeField("position",
-                        static_cast<uint32_t>(c->getFieldPosition(j)));
-      writer.writeField("ha_profile", c->getFieldHAProfileName(j));
-      float min_ov = getFieldMinOverride(c->getKeyId(), j);
-      float max_ov = getFieldMaxOverride(c->getKeyId(), j);
-      if (!std::isnan(min_ov)) {
-        writer.writeField("min", min_ov);
+  // Per-command locking (see fetchValues): never hold the mutex across
+  // socket I/O to slow readers.
+  visitor("[");
+  size_t i = 0;
+  while (true) {
+    std::string frag;
+    bool more = false;
+    {
+      std::lock_guard<std::recursive_mutex> lock(mutex_);
+      if (i >= commands_.size()) break;
+      size_t n = commands_.size();
+      std::array<const Command*, 64> ordered{};
+      for (size_t k = 0; k < n; k++) {
+        ordered[k] = &commands_[k];
       }
-      if (!std::isnan(max_ov)) {
-        writer.writeField("max", max_ov);
+      std::sort(ordered.begin(), ordered.begin() + n,
+                [](const Command* a, const Command* b) {
+                  return std::string_view(a->getKey()) <
+                         std::string_view(b->getKey());
+                });
+      const Command* c = ordered[i];
+      ebus::detail::JsonWriter writer(
+          [&frag](std::string_view s) { frag.append(s); });
+      auto scope = writer.objectScope();
+      writer.writeField("key", c->getKey());
+      writer.writeField("name", c->getName());
+      writer.writeHexField("read_cmd", c->getReadCmd());
+      if (c->hasWriteCmd()) {
+        writer.writeHexField("write_cmd", c->getWriteCmd(*this));
+      } else {
+        writer.writeField("write_cmd", "");
       }
+      writer.writeField("interval", c->getInterval());
+      writer.writeField("master", c->getMaster());
+
+      auto arr = writer.arrayScope("fields");
+      for (size_t j = 0; j < c->getFieldCount(); j++) {
+        auto field_obj = writer.objectScope();
+        writer.writeField("name", c->getFieldName(j));
+        const DataProfile* p = c->getFieldProfile(j);
+        writer.writeField("profile", p ? p->name : "");
+        writer.writeField("position",
+                          static_cast<uint32_t>(c->getFieldPosition(j)));
+        writer.writeField("ha_profile", c->getFieldHAProfileName(j));
+        float min_ov = getFieldMinOverride(c->getKeyId(), j);
+        float max_ov = getFieldMaxOverride(c->getKeyId(), j);
+        if (!std::isnan(min_ov)) {
+          writer.writeField("min", min_ov);
+        }
+        if (!std::isnan(max_ov)) {
+          writer.writeField("max", max_ov);
+        }
+      }
+      more = (i + 1 < commands_.size());
     }
+    visitor(frag);
+    if (!more) break;
+    visitor(",");
+    ++i;
   }
+  visitor("]");
 }
 
 size_t CommandManager::getActiveCommands() const {
@@ -417,40 +430,55 @@ void CommandManager::updateData(const ebus::ProtocolInfo& info) {
 }
 
 void CommandManager::fetchValues(const ebus::JsonChunkVisitor& visitor) const {
-  std::lock_guard<std::recursive_mutex> lock(mutex_);
-  ebus::detail::JsonWriter writer(visitor);
-  auto array_scope = writer.arrayScope();
+  // Per-command locking: the visitor performs socket I/O, and holding the
+  // command mutex across a slow reader stalls the bus threads updating
+  // values (stale timer arms, stray QQs). Render each row under a short
+  // lock, send it after release.
+  const uint32_t now = static_cast<uint32_t>(esp_timer_get_time() / 1000ULL);
+  visitor("[");
+  size_t i = 0;
+  while (true) {
+    std::string frag;
+    bool more = false;
+    {
+      std::lock_guard<std::recursive_mutex> lock(mutex_);
+      if (i >= commands_.size()) break;
+      size_t n = commands_.size();
+      std::array<const Command*, 64> ordered{};
+      for (size_t k = 0; k < n; k++) {
+        ordered[k] = &commands_[k];
+      }
+      std::sort(ordered.begin(), ordered.begin() + n,
+                [](const Command* a, const Command* b) {
+                  return std::string_view(a->getKey()) <
+                         std::string_view(b->getKey());
+                });
+      const Command* cmd = ordered[i];
+      ebus::detail::JsonWriter writer(
+          [&frag](std::string_view s) { frag.append(s); });
+      auto scope = writer.objectScope();
+      writer.writeField("key", cmd->getKey());
+      writer.writeField("name", cmd->getName());
 
-  size_t n = commands_.size();
-  std::array<const Command*, 64> ordered{};
-  for (size_t i = 0; i < n; i++) {
-    ordered[i] = &commands_[i];
-  }
-  std::sort(ordered.begin(), ordered.begin() + n,
-            [](const Command* a, const Command* b) {
-              return std::string_view(a->getKey()) <
-                     std::string_view(b->getKey());
-            });
+      writer.appendKey("value");
+      cmd->getValueJson(writer);
 
-  uint32_t now = static_cast<uint32_t>(esp_timer_get_time() / 1000ULL);
-  for (size_t i = 0; i < n; i++) {
-    const Command* cmd = ordered[i];
-    auto scope = writer.objectScope();
-    writer.writeField("key", cmd->getKey());
-    writer.writeField("name", cmd->getName());
-
-    writer.appendKey("value");
-    cmd->getValueJson(writer);
-
-    std::string unit;
-    if (cmd->getFieldCount() > 0) {
-      unit = std::string(cmd->getFieldUnit(0));
+      std::string unit;
+      if (cmd->getFieldCount() > 0) {
+        unit = std::string(cmd->getFieldUnit(0));
+      }
+      writer.writeField("unit", unit);
+      writer.writeField(
+          "age", (cmd->getLast() > 0) ? (now - cmd->getLast()) / 1000 : 0);
+      writer.writeField("write", cmd->hasWriteCmd());
+      more = (i + 1 < commands_.size());
     }
-    writer.writeField("unit", unit);
-    writer.writeField("age",
-                      (cmd->getLast() > 0) ? (now - cmd->getLast()) / 1000 : 0);
-    writer.writeField("write", cmd->hasWriteCmd());
+    visitor(frag);
+    if (!more) break;
+    visitor(",");
+    ++i;
   }
+  visitor("]");
 }
 
 ebus::ByteView CommandManager::getWriteCmd(size_t idx) const {
