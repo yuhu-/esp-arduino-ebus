@@ -125,7 +125,6 @@ bool App::initServices() {
     mqtt_.setRootTopic(std::string(mqtt_config.root_topic.c_str()));
   }
   mqtt_.start();
-  mqtt_.setStatusProvider(DeviceStatus::fetchStatus);
 
   mqtt_ha_.setUniqueId(mqtt_.getUniqueId());
   mqtt_ha_.setRootTopic(mqtt_.getRootTopic());

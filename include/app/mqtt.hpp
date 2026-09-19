@@ -112,8 +112,6 @@ class Mqtt {
   void change();
   void startTask();
   void stopTask();
-  void setStatusProvider(
-      std::function<void(const ebus::JsonChunkVisitor&)> provider);
 
   void setup(const char* id);
 
@@ -202,7 +200,6 @@ class Mqtt {
   TaskHandle_t task_handle_ = nullptr;
   uint32_t last_status_publish_ = 0;
   uint32_t status_publish_interval_ms_ = 10 * 1000;
-  std::function<void(const ebus::JsonChunkVisitor&)> status_provider_;
 
   // Track pending subscriptions for SUBSCRIBED event logging
   struct PendingSub {

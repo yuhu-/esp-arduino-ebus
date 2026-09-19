@@ -1,6 +1,7 @@
 #if defined(EBUS_INTERNAL)
 #include "app/mqtt.hpp"
 
+#include <esp_heap_caps.h>
 #include <esp_timer.h>
 #include <freertos/task.h>
 
@@ -11,9 +12,10 @@
 #include "app/ebus_accessor.hpp"
 #include "app/mqtt_ha.hpp"
 #include "ebus/detail/json_reader.hpp"
-#include "ebus/detail/json_writer.hpp"  // Include for JsonWriter
+#include "ebus/detail/json_writer.hpp"
 #include "ebus/status.hpp"
 #include "main.hpp"
+#include "network/wifi_network_manager.hpp"
 #include "system/device_status.hpp"
 #include "system/logger.hpp"
 
@@ -125,11 +127,6 @@ void Mqtt::stopTask() {
       client_ = nullptr;
     }
   }
-}
-
-void Mqtt::setStatusProvider(
-    std::function<void(const ebus::JsonChunkVisitor&)> provider) {
-  status_provider_ = std::move(provider);
 }
 
 void Mqtt::setup(const char* id) {
@@ -349,8 +346,6 @@ void Mqtt::taskFunc(void* arg) {
       xQueueCreateStatic(max_outgoing_queue_size, sizeof(OutgoingAction),
                          outgoing_storage, &outgoing_cb);
 
-  uint8_t tele_phase = 0;
-
   while (self->task_should_run_) {
     if (self->enabled_) {
       uint32_t currentMillis = (uint32_t)(esp_timer_get_time() / 1000ULL);
@@ -365,36 +360,50 @@ void Mqtt::taskFunc(void* arg) {
           continue;
         }
 
-        // Telemetry Rotation: Cycle through different status payloads to spread
-        // out heap usage and network traffic, preventing congestion on weak
-        // links.
-        switch (tele_phase) {
-          case 0:
-            if (self->status_provider_)
-              self->publishStream("state", 0, false, self->status_provider_);
-            tele_phase = 1;
-            break;
-
-          case 1:
-            self->publishStream("resources/app", 0, false,
-                                [](const ebus::JsonChunkVisitor& v) {
-                                  DeviceStatus::fetchAppStatus(v);
-                                });
-            tele_phase = 2;
-            break;
-
-          case 2:
-            self->publishStream("resources/lib", 0, false,
-                                [](const ebus::JsonChunkVisitor& v) {
-                                  getEbusController().fetchStatus(
-                                      [&v](const ebus::SystemResources& res) {
-                                        ebus::detail::JsonWriter writer(v);
-                                        res.toJson(writer);
-                                      });
-                                });
-            tele_phase = 0;
-            break;
-        }
+        // Slim telemetry state (single phase): liveness, version, heap
+        // gauge, signal and bus health. Heavyweight status/resources
+        // payloads moved to HTTP pull on purpose (no dual publication).
+        self->publishStream(
+            "state", 0, false, [](const ebus::JsonChunkVisitor& v) {
+              ebus::detail::JsonWriter writer(v);
+              auto scope = writer.objectScope();
+              writer.writeField(
+                  "uptime",
+                  static_cast<uint32_t>(esp_timer_get_time() / 1000000ULL));
+              writer.writeField("reset_code", DeviceStatus::resetCode());
+              writer.writeField("version", AUTO_VERSION);
+              writer.writeField("build", __DATE__ " " __TIME__);
+              {
+                auto heap = writer.objectScope("heap");
+                multi_heap_info_t info;
+                heap_caps_get_info(&info,
+                                   MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+                writer.writeField("free", info.total_free_bytes);
+                writer.writeField("largest", info.largest_free_block);
+                writer.writeField("min", info.minimum_free_bytes);
+              }
+              writer.writeField("rssi", WifiNetworkManager::RSSI());
+              uint32_t err_total = 0;
+              uint32_t msg_active = 0;
+              uint32_t msg_total = 0;
+              float err_rate = 0.0f;
+              getEbusController().fetchMetrics([&](const ebus::Metrics& m) {
+                err_total = m.handler.error_passive + m.handler.error_reactive +
+                            m.handler.error_active;
+                msg_active = m.handler.messages_active;
+                msg_total = m.handler.messages_passive +
+                            m.handler.messages_active +
+                            m.handler.messages_reactive;
+                err_rate = m.handler.errorRate();
+              });
+              {
+                auto bus = writer.objectScope("bus");
+                writer.writeFieldFloat("error_rate", err_rate);
+                writer.writeField("error_total", err_total);
+                writer.writeField("messages_active", msg_active);
+                writer.writeField("messages_total", msg_total);
+              }
+            });
       }
 
       // Determine how long to wait before next telemetry or a new item

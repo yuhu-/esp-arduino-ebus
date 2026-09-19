@@ -185,8 +185,7 @@ void MqttHA::publishDeviceInfo() const {
 
   publishDiag("sensor", "reset_code", "Reset Code", false, state_topic_buf,
               [this](ebus::detail::JsonWriter& w) {
-                w.writeField("value_template",
-                             "{{value_json.status.reset_code}}");
+                w.writeField("value_template", "{{value_json.reset_code}}");
                 w.writeField("icon", "mdi:restart");
                 w.writeField("entity_category", "diagnostic");
               });
@@ -194,8 +193,7 @@ void MqttHA::publishDeviceInfo() const {
   publishDiag("sensor", "uptime", "Uptime", true, state_topic_buf,
               [this](ebus::detail::JsonWriter& w) {
                 w.writeField("unit_of_measurement", "s");
-                w.writeField("value_template",
-                             "{{((value_json.status.uptime|float)/1000)|int}}");
+                w.writeField("value_template", "{{value_json.uptime}}");
                 w.writeField("icon", "mdi:clock-outline");
                 w.writeField("entity_category", "diagnostic");
               });
@@ -203,8 +201,7 @@ void MqttHA::publishDeviceInfo() const {
   publishDiag("sensor", "free_heap", "Heap Total Free Bytes", false,
               state_topic_buf, [this](ebus::detail::JsonWriter& w) {
                 w.writeField("unit_of_measurement", "B");
-                w.writeField("value_template",
-                             "{{value_json.heap.total_free_bytes}}");
+                w.writeField("value_template", "{{value_json.heap.free}}");
                 w.writeField("icon", "mdi:memory");
                 w.writeField("entity_category", "diagnostic");
               });
@@ -212,8 +209,7 @@ void MqttHA::publishDeviceInfo() const {
   publishDiag("sensor", "largest_free_block", "Heap Largest Free Block", false,
               state_topic_buf, [this](ebus::detail::JsonWriter& w) {
                 w.writeField("unit_of_measurement", "B");
-                w.writeField("value_template",
-                             "{{value_json.heap.largest_free_block}}");
+                w.writeField("value_template", "{{value_json.heap.largest}}");
                 w.writeField("icon", "mdi:memory");
                 w.writeField("entity_category", "diagnostic");
               });
@@ -221,8 +217,7 @@ void MqttHA::publishDeviceInfo() const {
   publishDiag("sensor", "min_free_heap", "Heap Minimum Free Bytes", false,
               state_topic_buf, [this](ebus::detail::JsonWriter& w) {
                 w.writeField("unit_of_measurement", "B");
-                w.writeField("value_template",
-                             "{{value_json.heap.minimum_free_bytes}}");
+                w.writeField("value_template", "{{value_json.heap.min}}");
                 w.writeField("icon", "mdi:memory");
                 w.writeField("entity_category", "diagnostic");
               });
@@ -230,122 +225,23 @@ void MqttHA::publishDeviceInfo() const {
   publishDiag("sensor", "rssi", "WiFi RSSI", false, state_topic_buf,
               [this](ebus::detail::JsonWriter& w) {
                 w.writeField("unit_of_measurement", "dBm");
-                w.writeField("value_template", "{{value_json.wifi.rssi}}");
+                w.writeField("value_template", "{{value_json.rssi}}");
                 w.writeField("icon", "mdi:wifi-strength-4");
-                w.writeField("entity_category", "diagnostic");
-              });
-
-  publishDiag("sensor", "wifi_last_connect", "WiFi Last Connect", false,
-              state_topic_buf, [this](ebus::detail::JsonWriter& w) {
-                w.writeField("value_template",
-                             "{{value_json.wifi.last_connect}}");
-                w.writeField("icon", "mdi:wifi");
-                w.writeField("entity_category", "diagnostic");
-              });
-
-  publishDiag("sensor", "wifi_reconnect_count", "WiFi Reconnect Count", false,
-              state_topic_buf, [this](ebus::detail::JsonWriter& w) {
-                w.writeField("value_template",
-                             "{{value_json.wifi.reconnect_count}}");
-                w.writeField("icon", "mdi:wifi-refresh");
                 w.writeField("entity_category", "diagnostic");
               });
 
   publishDiag("sensor", "firmware_version", "Firmware Version", false,
               state_topic_buf, [this](ebus::detail::JsonWriter& w) {
-                w.writeField("value_template",
-                             "{{value_json.firmware.version}}");
+                w.writeField("value_template", "{{value_json.version}}");
                 w.writeField("icon", "mdi:chip");
                 w.writeField("entity_category", "diagnostic");
               });
 
-  publishDiag("sensor", "sdk_version", "Firmware ESP-IDF Version", false,
+  publishDiag("sensor", "bus_error_rate", "eBUS Error Rate", false,
               state_topic_buf, [this](ebus::detail::JsonWriter& w) {
-                w.writeField("value_template",
-                             "{{value_json.firmware.esp_idf_version}}");
-                w.writeField("icon", "mdi:chip");
-                w.writeField("entity_category", "diagnostic");
-              });
-
-  publishDiag("sensor", "chip_revision", "Chip Revision", false,
-              state_topic_buf, [this](ebus::detail::JsonWriter& w) {
-                w.writeField("value_template",
-                             "{{value_json.chip.chip_revision}}");
-                w.writeField("icon", "mdi:cpu-64-bit");
-                w.writeField("entity_category", "diagnostic");
-              });
-
-  publishDiag("sensor", "flash_size", "Chip Flash Size", false, state_topic_buf,
-              [this](ebus::detail::JsonWriter& w) {
-                w.writeField("unit_of_measurement", "B");
-                w.writeField("value_template",
-                             "{{value_json.chip.flash_size}}");
-                w.writeField("icon", "mdi:memory");
-                w.writeField("entity_category", "diagnostic");
-              });
-
-  publishDiag("sensor", "ebus_pwm", "eBUS PWM", false, state_topic_buf,
-              [this](ebus::detail::JsonWriter& w) {
-                w.writeField("value_template", "{{value_json.ebus.pwm}}");
-                w.writeField("icon", "mdi:fan");
-                w.writeField("entity_category", "diagnostic");
-              });
-
-  publishDiag("sensor", "ebus_address", "eBUS Address", false, state_topic_buf,
-              [this](ebus::detail::JsonWriter& w) {
-                w.writeField("value_template",
-                             "{{value_json.ebus.ebus_address}}");
-                w.writeField("icon", "mdi:network");
-                w.writeField("entity_category", "diagnostic");
-              });
-
-  publishDiag("sensor", "bus_window", "eBUS Bus Window", false, state_topic_buf,
-              [this](ebus::detail::JsonWriter& w) {
-                w.writeField("unit_of_measurement", "µs");
-                w.writeField("value_template",
-                             "{{value_json.ebus.bus_window}}");
-                w.writeField("icon", "mdi:timer");
-                w.writeField("entity_category", "diagnostic");
-              });
-
-  publishDiag("sensor", "bus_offset", "eBUS Bus Offset", false, state_topic_buf,
-              [this](ebus::detail::JsonWriter& w) {
-                w.writeField("unit_of_measurement", "µs");
-                w.writeField("value_template",
-                             "{{value_json.ebus.bus_offset}}");
-                w.writeField("icon", "mdi:timer");
-                w.writeField("entity_category", "diagnostic");
-              });
-
-  publishDiag("sensor", "active_commands", "Schedule Active Commands", false,
-              state_topic_buf, [this](ebus::detail::JsonWriter& w) {
-                w.writeField("value_template",
-                             "{{value_json.schedule.active_commands}}");
-                w.writeField("icon", "mdi:play-circle");
-                w.writeField("entity_category", "diagnostic");
-              });
-
-  publishDiag("sensor", "passive_commands", "Schedule Passive Commands", false,
-              state_topic_buf, [this](ebus::detail::JsonWriter& w) {
-                w.writeField("value_template",
-                             "{{value_json.schedule.passive_commands}}");
-                w.writeField("icon", "mdi:pause-circle");
-                w.writeField("entity_category", "diagnostic");
-              });
-
-  publishDiag("sensor", "sockets_detected", "Sockets Detected", false,
-              state_topic_buf, [this](ebus::detail::JsonWriter& w) {
-                w.writeField("value_template",
-                             "{{value_json.sockets.detected}}");
-                w.writeField("icon", "mdi:lan-connect");
-                w.writeField("entity_category", "diagnostic");
-              });
-
-  publishDiag("sensor", "sockets_connected", "Sockets Connected", false,
-              state_topic_buf, [this](ebus::detail::JsonWriter& w) {
-                w.writeField("value_template",
-                             "{{value_json.sockets.connected}}");
-                w.writeField("icon", "mdi:lan-connect");
+                w.writeField("unit_of_measurement", "%");
+                w.writeField("value_template", "{{value_json.bus.error_rate}}");
+                w.writeField("icon", "mdi:alert-circle");
                 w.writeField("entity_category", "diagnostic");
               });
 }
