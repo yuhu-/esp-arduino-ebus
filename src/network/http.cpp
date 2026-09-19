@@ -5,6 +5,7 @@
 #include <freertos/task.h>
 
 #include "api/adc_api.hpp"
+#include "api/bus_api.hpp"
 #include "api/commands_api.hpp"
 #include "api/config_api.hpp"
 #include "api/cron_api.hpp"
@@ -143,6 +144,9 @@ void SetupHttpHandlers() {
 
   static DevicesApi devices_api;
   devices_api.registerHandlers(configServer);
+
+  static BusApi bus_api;
+  bus_api.registerHandlers(configServer);
 
   static MetricsApi metrics_api;
   metrics_api.registerHandlers(configServer);
