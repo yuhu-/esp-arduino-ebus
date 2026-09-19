@@ -17,10 +17,13 @@
         <span id="status">...</span>
     </div>
     <div class="container" id="metricsContainer"></div>
+    <h2>App</h2>
+    <div class="container" id="metricsAppContainer"></div>
     <script src="common.js"></script>
     <script>
         function loadMetrics() {
             fetchJson('/api/v1/metrics/lib', data => renderNestedSections(data, 'metricsContainer', true, 16));
+            fetchJson('/api/v1/metrics/app', data => renderNestedSections(data, 'metricsAppContainer', true, 16));
         }
         document.getElementById('btnHome').addEventListener('click', handleHome);
         document.getElementById('btnRefresh').addEventListener('click', loadMetrics);

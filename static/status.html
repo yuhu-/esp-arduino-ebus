@@ -13,29 +13,51 @@
     <div class="controls">
         <button id="btnHome">Home</button>
         <button id="btnSystem">System</button>
-        <button id="btnAppResources">App Resources</button>
-        <button id="btnLibResources">Lib Resources</button>
+        <button id="btnNetwork">Network</button>
+        <button id="btnBus">Bus</button>
         <span id="status">...</span>
     </div>
     <div class="container" id="statusContainer"></div>
     <script src="common.js"></script>
     <script>
         function loadSystem() {
-            fetchJson('/api/v1/status', data => renderNestedSections(data, 'statusContainer'));
+            fetchJson('/api/v1/system', data => renderNestedSections(data, 'statusContainer'));
         }
-        function loadAppResources() {
-            fetchJson('/api/v1/status/app', data => renderNestedSections(data, 'statusContainer'));
+        function loadNetwork() {
+            fetchJson('/api/v1/network', data => renderNestedSections(data, 'statusContainer'));
         }
-        function loadLibResources() {
-            fetchJson('/api/v1/status/lib', data => renderNestedSections(data, 'statusContainer', true));
+        function loadBus() {
+            fetchJson('/api/v1/bus', data => renderNestedSections(data, 'statusContainer', true));
         }
         document.getElementById('btnHome').addEventListener('click', handleHome);
         document.getElementById('btnSystem').addEventListener('click', loadSystem);
-        document.getElementById('btnAppResources').addEventListener('click', loadAppResources);
-        document.getElementById('btnLibResources').addEventListener('click', loadLibResources);
+        document.getElementById('btnNetwork').addEventListener('click', loadNetwork);
+        document.getElementById('btnBus').addEventListener('click', loadBus);
+
+        // Probe endpoints first: internal-only clusters 404 on bridge
+        // builds, so hide what isn't served instead of showing errors.
+        async function initViews() {
+            const views = [
+                { btn: 'btnSystem', path: '/api/v1/system', load: loadSystem },
+                { btn: 'btnNetwork', path: '/api/v1/network', load: loadNetwork },
+                { btn: 'btnBus', path: '/api/v1/bus', load: loadBus },
+            ];
+            let first = null;
+            for (const v of views) {
+                try {
+                    const res = await fetch(v.path);
+                    if (!res.ok) throw new Error('unavailable');
+                    if (!first) first = v;
+                } catch (err) {
+                    document.getElementById(v.btn).style.display = 'none';
+                }
+            }
+            if (first) first.load();
+            else setStatus('No data endpoints');
+        }
 
         // Initial load
-        loadSystem();
+        initViews();
     </script>
 </body>
 

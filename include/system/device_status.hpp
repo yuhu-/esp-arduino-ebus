@@ -42,10 +42,6 @@ class DeviceStatus {
 
   static void fetchStatus(const ebus::JsonChunkVisitor& visitor);
 
-#if defined(EBUS_INTERNAL)
-  static void fetchAppStatus(const ebus::JsonChunkVisitor& visitor);
-#endif
-
  private:
   static const AppConfig* config_;
   static uint32_t reset_code_;
