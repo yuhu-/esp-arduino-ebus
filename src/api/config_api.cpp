@@ -24,7 +24,7 @@ bool ConfigApi::registerHandlers(httpd_handle_t server) {
   if (server == nullptr) return false;
 
   RegisterUri("/config", HTTP_GET, handleConfigPage);
-  RegisterUri("/api/v1/wifi/scan", HTTP_POST, handleWifiScan);
+  RegisterUri("/api/v1/network/wifi/scan", HTTP_POST, handleWifiScan);
 
   return true;
 }

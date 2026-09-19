@@ -23,10 +23,10 @@ bool CronApi::registerHandlers(httpd_handle_t server) {
   if (server == nullptr) return false;
 
   RegisterUri("/cron", HTTP_GET, handleCronPage);
-  RegisterUri("/api/v1/cron", HTTP_GET, handleCron);
-  RegisterUri("/api/v1/cron", HTTP_POST, handleCronSave);
-  RegisterUri("/api/v1/cron/load", HTTP_POST, handleCronLoad);
-  RegisterUri("/api/v1/cron/evaluate", HTTP_POST, handleCronEvaluate);
+  RegisterUri("/api/v1/app/cron", HTTP_GET, handleCron);
+  RegisterUri("/api/v1/app/cron", HTTP_POST, handleCronSave);
+  RegisterUri("/api/v1/app/cron/load", HTTP_POST, handleCronLoad);
+  RegisterUri("/api/v1/app/cron/evaluate", HTTP_POST, handleCronEvaluate);
 
   return true;
 }

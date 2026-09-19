@@ -28,9 +28,9 @@ bool ValuesApi::registerHandlers(httpd_handle_t server) {
   if (server == nullptr) return false;
 
   RegisterUri("/values", HTTP_GET, handleValuesPage);
-  RegisterUri("/api/v1/values", HTTP_GET, handleValues);
-  RegisterUri("/api/v1/values/write", HTTP_POST, handleValuesWrite);
-  RegisterUri("/api/v1/values/read", HTTP_POST, handleValuesRead);
+  RegisterUri("/api/v1/app/values", HTTP_GET, handleValues);
+  RegisterUri("/api/v1/app/values/write", HTTP_POST, handleValuesWrite);
+  RegisterUri("/api/v1/app/values/read", HTTP_POST, handleValuesRead);
 
   return true;
 }

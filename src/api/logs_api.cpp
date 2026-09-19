@@ -23,8 +23,9 @@ bool LogsApi::registerHandlers(httpd_handle_t server) {
   if (server == nullptr) return false;
 
   RegisterUri("/logs", HTTP_GET, handleLogsPage);
-  RegisterUri("/api/v1/logs", HTTP_GET, handleLogs);
-  RegisterUri("/api/v1/logs/time-relation", HTTP_GET, handleLogsTimeRelation);
+  RegisterUri("/api/v1/app/logs", HTTP_GET, handleLogs);
+  RegisterUri("/api/v1/app/logs/time-relation", HTTP_GET,
+              handleLogsTimeRelation);
 
   return true;
 }

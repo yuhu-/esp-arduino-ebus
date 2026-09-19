@@ -179,7 +179,7 @@
             setStatus('Loading...');
             resetFieldsToDefaultValues();
             try {
-                const res = await fetch('/api/v1/config');
+                const res = await fetch('/api/v1/app/config');
                 if (!res.ok) throw new Error('Load failed');
                 const cfg_obj = await res.json();
                 const cfg = cfg_obj.config || {};
@@ -207,7 +207,7 @@
             }
 
             try {
-                const res = await fetch('/api/v1/config', {
+                const res = await fetch('/api/v1/app/config', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
@@ -262,7 +262,7 @@
             if (!confirm('Reset all saved configuration values?')) return;
             setStatus('Resetting...');
             try {
-                const res = await fetch('/api/v1/config/reset', { method: 'POST' });
+                const res = await fetch('/api/v1/app/config/reset', { method: 'POST' });
                 const text = await res.text();
                 setStatus(res.ok ? text : `Error: ${text}`);
                 if (res.ok) await loadConfig();
@@ -295,7 +295,7 @@
             resultsEl.style.display = 'none';
 
             try {
-                const res = await fetch('/api/v1/wifi/scan', { method: 'POST' });
+                const res = await fetch('/api/v1/network/wifi/scan', { method: 'POST' });
                 if (!res.ok) throw new Error('Scan failed');
 
                 const networks = await res.json();

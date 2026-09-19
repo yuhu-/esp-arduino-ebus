@@ -266,16 +266,14 @@ esp_err_t handleConfigReset(httpd_req_t* req) {
 }
 }  // namespace
 
-void ConfigManager::begin() {
-  ensureNvsReady();
-}
+void ConfigManager::begin() { ensureNvsReady(); }
 
 void ConfigManager::registerHandlers() {
   // Requires a running HTTP server (see SetupHttpHandlers): called from
   // App::initHttp, not from begin().
-  RegisterUri("/api/v1/config", HTTP_GET, handleConfigGet);
-  RegisterUri("/api/v1/config", HTTP_POST, handleConfigSet);
-  RegisterUri("/api/v1/config/reset", HTTP_POST, handleConfigReset);
+  RegisterUri("/api/v1/app/config", HTTP_GET, handleConfigGet);
+  RegisterUri("/api/v1/app/config", HTTP_POST, handleConfigSet);
+  RegisterUri("/api/v1/app/config/reset", HTTP_POST, handleConfigReset);
 }
 
 void ConfigManager::fetchConfig(const ebus::JsonChunkVisitor& visitor) {

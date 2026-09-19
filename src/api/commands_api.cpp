@@ -60,14 +60,15 @@ bool CommandsApi::registerHandlers(httpd_handle_t server) {
   if (server == nullptr) return false;
 
   RegisterUri("/commands", HTTP_GET, handleCommandsPage);
-  RegisterUri("/api/v1/commands", HTTP_GET, handleCommands);
-  RegisterUri("/api/v1/commands/evaluate", HTTP_POST, handleCommandsEvaluate);
-  RegisterUri("/api/v1/commands/insert", HTTP_POST, handleCommandsInsert);
-  RegisterUri("/api/v1/commands/upload", HTTP_POST, handleCommandsUpload);
-  RegisterUri("/api/v1/commands/remove", HTTP_POST, handleCommandsRemove);
-  RegisterUri("/api/v1/commands/load", HTTP_POST, handleCommandsLoad);
-  RegisterUri("/api/v1/commands/save", HTTP_POST, handleCommandsSave);
-  RegisterUri("/api/v1/commands/wipe", HTTP_POST, handleCommandsWipe);
+  RegisterUri("/api/v1/app/commands", HTTP_GET, handleCommands);
+  RegisterUri("/api/v1/app/commands/evaluate", HTTP_POST,
+              handleCommandsEvaluate);
+  RegisterUri("/api/v1/app/commands/insert", HTTP_POST, handleCommandsInsert);
+  RegisterUri("/api/v1/app/commands/upload", HTTP_POST, handleCommandsUpload);
+  RegisterUri("/api/v1/app/commands/remove", HTTP_POST, handleCommandsRemove);
+  RegisterUri("/api/v1/app/commands/load", HTTP_POST, handleCommandsLoad);
+  RegisterUri("/api/v1/app/commands/save", HTTP_POST, handleCommandsSave);
+  RegisterUri("/api/v1/app/commands/wipe", HTTP_POST, handleCommandsWipe);
 
   return true;
 }

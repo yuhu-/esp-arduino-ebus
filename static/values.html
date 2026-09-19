@@ -30,7 +30,7 @@
         let isPaused = false;
 
         function handleValues() {
-            fetchJson('/api/v1/values', data => renderValuesTable(data), 'Fetching values...');
+            fetchJson('/api/v1/app/values', data => renderValuesTable(data), 'Fetching values...');
         }
 
         function renderValuesTable(data) {
@@ -146,7 +146,7 @@
                 const raw = inputEl.value;
                 const num = Number(raw);
                 const payload = (raw !== '' && isFinite(num)) ? { key: key, value: num } : { key: key, value: raw };
-                const res = await fetch('/api/v1/values/write', {
+                const res = await fetch('/api/v1/app/values/write', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
@@ -167,7 +167,7 @@
             setStatus('Requested, waiting...');
             try {
                 const payload = { key: key };
-                const res = await fetch('/api/v1/values/read', {
+                const res = await fetch('/api/v1/app/values/read', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
