@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 #include <string_view>
 
 #include "app/app.hpp"
@@ -25,13 +26,15 @@ extern "C" void app_main(void) {
   logger.info("Starting esp-ebus adapter version " AUTO_VERSION);
 
 #if defined(EBUS_INTERNAL)
-  // Connect library logger to app logger
+  // Connect library logger to app logger. Runs on the caller's task
+  // (often the bus thread): no printf/snprintf here, prefix by hand.
   ebus::Controller::setLogSink([](ebus::LogLevel level, std::string_view msg) {
     char buf[max_msg_length];
-    int n = snprintf(buf, sizeof(buf), "eBUS-Lib: %.*s", (int)msg.size(),
-                     msg.data());
-    if (n < 0) return;
-    std::string_view out(buf, std::min((size_t)n, sizeof(buf) - 1));
+    constexpr std::string_view prefix("eBUS-Lib: ");
+    size_t n = std::min(msg.size(), sizeof(buf) - prefix.size() - 1);
+    std::memcpy(buf, prefix.data(), prefix.size());
+    std::memcpy(buf + prefix.size(), msg.data(), n);
+    std::string_view out(buf, prefix.size() + n);
 
     switch (level) {
       case ebus::LogLevel::error:

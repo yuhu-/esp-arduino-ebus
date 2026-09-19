@@ -264,20 +264,14 @@ bool App::initServices() {
     return false;
   }
 
-  // Optimized callbacks: Avoid heap-heavy JSON work inside library threads
+  // The protocol callback fires synchronously on the bus thread (and again
+  // on the reactor task): keep it allocation-free and small-stack. No
+  // snprintf/toString/Logger here — a single newlib printf nested into the
+  // handler FSM overflowed the 3 KB bus task (Guru Meditation, stack
+  // protection fault in _svfprintf_r). Formatting happens lazily on the
+  // monitor/HTTP side; errors stay visible via metrics and ebusread.
   getEbusController().setProtocolCallback(
       [this](const ebus::ProtocolInfo& info) {
-        char buf[128];
-        if (info.is_error)
-          snprintf(buf, sizeof(buf), "%s / %s -> '%s'",
-                   ebus::toString(info.master_view).c_str(),
-                   ebus::toString(info.slave_view).c_str(),
-                   ebus::toString(info.protocol_error));
-        else
-          snprintf(buf, sizeof(buf), "%s / %s",
-                   ebus::toString(info.master_view).c_str(),
-                   ebus::toString(info.slave_view).c_str());
-        logger.info(buf, false, info.session_id, info.poll_id);
         monitor_.enqueueProtocolInfo(info);
       });
 
