@@ -19,6 +19,10 @@ inline constexpr size_t max_entries = 5;
 inline constexpr size_t max_msg_length = 768;
 // Maximum log message for the print queue
 inline constexpr size_t print_queue_entries = 5;
+// Serial print lines are truncated to this: the ring keeps full text,
+// the print queue is heap-backed (entries * length) and headless
+// operation never reads it.
+inline constexpr size_t print_msg_length = 192;
 }  // namespace
 
 class Logger {
@@ -44,8 +48,14 @@ class Logger {
 
   TaskHandle_t getTaskHandle() const { return print_task_; }
   size_t getQueueSize() const;
-  static size_t getQueueCapacity() { return max_entries; }
+  static size_t getQueueCapacity() { return print_queue_entries; }
   size_t getQueueHighWatermark() const;
+  uint32_t getRingOverwriteCount() const {
+    return ring_overwrites_.load(std::memory_order_relaxed);
+  }
+  uint32_t getPrintDropCount() const {
+    return print_drops_.load(std::memory_order_relaxed);
+  }
 
  private:
   enum class LogLevel { DEBUG, INFO, WARN, ERROR };
@@ -76,6 +86,8 @@ class Logger {
   QueueHandle_t print_queue_ = nullptr;
   TaskHandle_t print_task_ = nullptr;
   std::atomic<size_t> max_queue_size_ = 0;
+  std::atomic<uint32_t> ring_overwrites_ = 0;
+  std::atomic<uint32_t> print_drops_ = 0;
 };
 
 extern Logger logger;

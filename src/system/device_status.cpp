@@ -89,6 +89,7 @@ struct FirmwareStatus {
   void toJson(ebus::detail::JsonWriter& writer) const {
     auto scope = writer.objectScope();
     writer.writeField("version", AUTO_VERSION);
+    writer.writeField("build", __DATE__ " " __TIME__);
     writer.writeField("esp_idf_version", esp_get_idf_version());
 #if !defined(EBUS_INTERNAL)
     writer.writeField("async", static_cast<bool>(USE_ASYNCHRONOUS));

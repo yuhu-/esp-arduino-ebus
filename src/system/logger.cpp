@@ -15,7 +15,7 @@ Logger::Logger(size_t maxEntries)
     : index_(0),
       entries_(0),
       mux_(portMUX_INITIALIZER_UNLOCKED),
-      print_queue_(xQueueCreate(print_queue_entries, max_msg_length)),
+      print_queue_(xQueueCreate(print_queue_entries, print_msg_length)),
       print_task_(nullptr) {
   if (print_queue_ != nullptr) {
     xTaskCreate(Logger::printTaskEntry, "logger",
@@ -142,13 +142,15 @@ bool Logger::currentMillisTimeRelation(uint64_t& currentMillis,
 void Logger::log(LogLevel level, std::string_view message, bool is_json,
                  uint32_t session_id, uint16_t poll_id) {
   if (print_queue_ != nullptr && print_task_ != nullptr) {
-    char msg[max_msg_length]{};
+    char msg[print_msg_length]{};
     size_t len = std::min(message.size(), sizeof(msg) - 1);
     std::memcpy(msg, message.data(), len);
     msg[len] = '\0';
     if (xQueueSend(print_queue_, msg, 0) == pdPASS) {
       ebus::updateMaxAtomic(max_queue_size_,
                             uxQueueMessagesWaiting(print_queue_));
+    } else {
+      print_drops_.fetch_add(1, std::memory_order_relaxed);
     }
   }
 
@@ -166,7 +168,11 @@ void Logger::log(LogLevel level, std::string_view message, bool is_json,
   buffer_[index_].session_id = session_id;
   buffer_[index_].poll_id = poll_id;
   index_ = (index_ + 1) % max_entries;
-  if (entries_ < max_entries) entries_++;
+  if (entries_ < max_entries) {
+    entries_++;
+  } else {
+    ring_overwrites_.fetch_add(1, std::memory_order_relaxed);
+  }
   portEXIT_CRITICAL(&mux_);
 }
 
@@ -177,7 +183,7 @@ void Logger::printTaskEntry(void* arg) {
 
 void Logger::printTaskLoop() {
   while (true) {
-    char msg[max_msg_length]{};
+    char msg[print_msg_length]{};
     if (xQueueReceive(print_queue_, msg, portMAX_DELAY) == pdTRUE) {
       printf("%s\n", msg);
     }
