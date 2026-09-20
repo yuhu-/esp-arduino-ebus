@@ -26,6 +26,8 @@ bool MetricsApi::registerHandlers(httpd_handle_t server) {
   RegisterUri("/api/v1/metrics/lib", HTTP_GET, handleMetrics);
   RegisterUri("/api/v1/metrics/app", HTTP_GET, handleMetricsApp);
   RegisterUri("/api/v1/metrics/lib/reset", HTTP_POST, handleMetricsReset);
+  RegisterUri("/api/v1/metrics/lib/breaker/reset", HTTP_POST,
+              handleBreakerReset);
 
   return true;
 }
@@ -88,6 +90,15 @@ esp_err_t MetricsApi::handleMetricsApp(httpd_req_t* req) {
 esp_err_t MetricsApi::handleMetricsReset(httpd_req_t* req) {
   getEbusController().resetMetrics();
   HttpUtils::sendSuccessResponse(req, "reset");
+  return ESP_OK;
+}
+
+// Ops/diagnostics: close the TX breaker now so the next scheduled poll
+// becomes an immediate single probe. Lets a capture (ebusread + console)
+// bracket exactly one attempt instead of waiting out the cooldown.
+esp_err_t MetricsApi::handleBreakerReset(httpd_req_t* req) {
+  getEbusController().resetBreaker();
+  HttpUtils::sendSuccessResponse(req, "breaker_reset");
   return ESP_OK;
 }
 

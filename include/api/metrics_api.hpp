@@ -15,6 +15,7 @@ class MetricsApi {
   static esp_err_t handleMetrics(httpd_req_t* req);
   static esp_err_t handleMetricsApp(httpd_req_t* req);
   static esp_err_t handleMetricsReset(httpd_req_t* req);
+  static esp_err_t handleBreakerReset(httpd_req_t* req);
 };
 
 #endif
