@@ -157,15 +157,18 @@ void fillJsonFromNvs(ebus::detail::JsonWriter& writer, nvs_handle_t handle) {
     nvs_entry_info_t info{};
     nvs_entry_info(it, &info);
 
-    // Skip sensitive configuration keys in JSON output to prevent leaking
-    // credentials if (std::strcmp(info.key, "wifiPassword") != 0 &&
-    //     std::strcmp(info.key, "mqttPass") != 0 &&
-    //     std::strcmp(info.key, "apModePassword") != 0) {
-    std::string value;
-    if (readEntryValueAsString(handle, info, value)) {
-      writer.writeField(info.key, value);
+    // Never serve credentials: the config editor treats a missing password
+    // as "keep the stored one", so omitting them here is lossless. See
+    // AppConfig::mergeFlatJson for the matching keep-on-empty rule.
+    const bool is_secret = std::strcmp(info.key, "wifiPassword") == 0 ||
+                           std::strcmp(info.key, "mqttPass") == 0 ||
+                           std::strcmp(info.key, "apModePassword") == 0;
+    if (!is_secret) {
+      std::string value;
+      if (readEntryValueAsString(handle, info, value)) {
+        writer.writeField(info.key, value);
+      }
     }
-    // }
 
     if (nvs_entry_next(&it) != ESP_OK) {
       break;
@@ -329,8 +332,14 @@ bool ConfigManager::writeConfigJson(std::string_view body, std::string& error) {
     if (token == ebus::detail::JsonReader::Token::key) {
       std::string key(reader.value());
       if (reader.next() == ebus::detail::JsonReader::Token::string) {
-        if (!::writeString(handle, key.c_str(), std::string(reader.value()),
-                           error)) {
+        std::string value(reader.value());
+        // Keep-on-empty for credentials (mirrors AppConfig::mergeFlatJson):
+        // an empty password means "keep the stored one", never "clear it".
+        if (value.empty() && (key == "wifiPassword" || key == "mqttPass" ||
+                              key == "apModePassword")) {
+          continue;
+        }
+        if (!::writeString(handle, key.c_str(), value, error)) {
           ok = false;
         }
         dirty = true;
