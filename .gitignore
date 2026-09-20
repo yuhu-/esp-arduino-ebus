@@ -11,3 +11,4 @@ AGENTS.md
 # Generated headers (build-time generation via scripts/generate_*.py)
 include/app/data_profile_gen.hpp
 include/app/ha_profile_gen.hpp
+include/app/build_info_gen.hpp

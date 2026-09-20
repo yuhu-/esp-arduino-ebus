@@ -2,6 +2,10 @@
 
 #if defined(EBUS_INTERNAL)
 
+#if __has_include("app/build_info_gen.hpp")
+#include "app/build_info_gen.hpp"
+#endif
+
 #include <esp_chip_info.h>
 #include <esp_flash.h>
 #include <esp_heap_caps.h>
@@ -46,7 +50,11 @@ esp_err_t SystemApi::handleSystem(httpd_req_t* req) {
     {
       auto firmware = writer.objectScope("firmware");
       writer.writeField("version", AUTO_VERSION);
+#if __has_include("app/build_info_gen.hpp")
+      writer.writeField("build", build_time_str);
+#else
       writer.writeField("build", __DATE__ " " __TIME__);
+#endif
       writer.writeField("esp_idf_version", esp_get_idf_version());
       writer.writeField("unique_id", getUniqueId());
       writer.writeField("adapter_hw_version", getAdapterHwVersionString());
