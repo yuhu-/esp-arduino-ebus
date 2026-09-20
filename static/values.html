@@ -13,7 +13,7 @@
     <div class="controls">
         <button id="btnHome">Home</button>
         <button id="btnValues">Values</button>
-        <button id="btnPause">Pause</button>
+        <button id="btnPause">Resume</button>
         <button id="btnDecreaseInterval">-</button>
         <span id="pollIntervalLabel">?s</span>
         <button id="btnIncreaseInterval">+</button>
@@ -27,7 +27,10 @@
     <script>
         let pollInterval = 10;
         let pollingTimeout;
-        let isPaused = false;
+        // Auto-poll starts paused: single initial load only, refresh via
+        // Values button or Resume. Background polling kept the bus thread
+        // under permanent HTTP/TCP load and could trigger echo storms.
+        let isPaused = true;
 
         function handleValues() {
             fetchJson('/api/v1/app/values', data => renderValuesTable(data), 'Fetching values...');

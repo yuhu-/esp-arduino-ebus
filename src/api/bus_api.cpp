@@ -31,24 +31,8 @@ esp_err_t BusApi::handleBus(httpd_req_t* req) {
   ebus::detail::JsonWriter writer(sender);
   {
     auto scope = writer.objectScope();
-    // Metrics slices share this writer sequentially (no nesting: each
-    // toJson completes before the next starts).
-    getEbusController().fetchMetrics([&](const ebus::Metrics& m) {
-      writer.appendKey("handler");
-      m.handler.toJson(writer);
-      writer.appendKey("request");
-      m.request.toJson(writer);
-      writer.appendKey("bus");
-      m.bus.toJson(writer);
-      writer.appendKey("device_counts");
-      m.devices.toJson(writer);
-    });
-    // Device rows stream through their own writer; flush the key first
-    // so chunk order stays valid, then complete the value state.
-    writer.appendKey("devices");
-    writer.flush();
-    getEbusController().fetchDevices(sender);
-    writer.externalValue();
+    // Single source of truth: counters live in /api/v1/metrics/lib.
+    // /bus carries live state only (config + devices).
     {
       auto config = writer.objectScope("config");
       const AppConfig& cfg = DeviceStatus::config();
@@ -57,6 +41,12 @@ esp_err_t BusApi::handleBus(httpd_req_t* req) {
       writer.writeField("offset_us", cfg.bus.offset_us);
       writer.writeField("pwm", cfg.pwm.value);
     }
+    // Device rows stream through their own writer; flush the key first
+    // so chunk order stays valid, then complete the value state.
+    writer.appendKey("devices");
+    writer.flush();
+    getEbusController().fetchDevices(sender);
+    writer.externalValue();
   }
   httpd_resp_send_chunk(req, nullptr, 0);
   return ESP_OK;

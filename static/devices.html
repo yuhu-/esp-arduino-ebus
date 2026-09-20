@@ -19,7 +19,7 @@
         <span id="pollIntervalLabel" style="margin-left:auto">Poll Interval: 10 seconds</span>
         <button id="btnDecreaseInterval">-</button>
         <button id="btnIncreaseInterval">+</button>
-        <button id="btnPause">Pause</button>
+        <button id="btnPause">Resume</button>
     </div>
     <table>
         <thead id="devicesTableHeader"></thead>
@@ -29,7 +29,10 @@
     <script>
         let pollInterval = 10;
         let pollingTimeout;
-        let isPaused = false;
+        // Auto-poll starts paused: single initial load only, refresh via
+        // Devices button or Resume. Background polling kept the bus thread
+        // under permanent HTTP/TCP load and could trigger echo storms.
+        let isPaused = true;
 
         function handleDevices() {
             handleSimpleTable('/api/v1/bus/devices', 'devicesTableHeader', 'devicesTableBody');
