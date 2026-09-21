@@ -23,8 +23,7 @@ host, out = sys.argv[1], sys.argv[2]
 ENDPOINTS = [
     "api/v1/system",
     "api/v1/network",
-    "api/v1/bus",
-    "api/v1/bus/devices",
+    "api/v1/devices",
     "api/v1/metrics/lib",
     "api/v1/metrics/app",
     "api/v1/app/values",
