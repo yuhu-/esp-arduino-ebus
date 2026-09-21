@@ -118,12 +118,25 @@ a.link-button {
 /* ========== Tables ========== */
 table {
     width: 100%;
+    table-layout: fixed;
     border-collapse: collapse;
     margin-top: 12px;
     background: #fff;
     box-shadow: 0 2px 8px #0001;
     border-radius: 0.3rem;
     overflow: hidden;
+}
+
+/* Shared first-column width so stacked 2-column tables align their
+ * second column on the same vertical line, page-wide. */
+th:first-child,
+td:first-child {
+    width: 35%;
+    overflow-wrap: anywhere;
+}
+
+td {
+    overflow-wrap: anywhere;
 }
 
 th,
