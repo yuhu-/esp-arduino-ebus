@@ -10,4 +10,7 @@ class StatusApi {
 
  private:
   static esp_err_t handleStatusPage(httpd_req_t* req);
+#if defined(EBUS_INTERNAL)
+  static esp_err_t handleHealth(httpd_req_t* req);
+#endif
 };

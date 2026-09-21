@@ -77,14 +77,6 @@ esp_err_t SystemApi::handleSystem(httpd_req_t* req) {
         writer.writeField("flash_size", flash_size);
       }
     }
-    writer.writeField("uptime",
-                      static_cast<uint64_t>(esp_timer_get_time() / 1000ULL));
-    writer.writeField("reset_code", DeviceStatus::resetCode());
-    {
-      auto logger_scope = writer.objectScope("logger");
-      writer.writeField("ring_overwrites", logger.getRingOverwriteCount());
-      writer.writeField("print_drops", logger.getPrintDropCount());
-    }
   }
   httpd_resp_send_chunk(req, nullptr, 0);
   return ESP_OK;

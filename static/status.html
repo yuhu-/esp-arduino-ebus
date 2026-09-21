@@ -12,30 +12,31 @@
     <h1>Status</h1>
     <div class="controls">
         <button id="btnHome">Home</button>
-        <button id="btnSystem">System</button>
+        <button id="btnHealth">Health</button>
         <button id="btnHeap">Heap</button>
         <button id="btnTasks">Tasks</button>
+        <button id="btnSystem">System</button>
         <button id="btnNetwork">Network</button>
-        <button id="btnRefresh" style="margin-left:auto;">Refresh</button>
         <span id="status">...</span>
+        <button id="btnRefresh" style="margin-left:auto;">Refresh</button>
     </div>
     <div class="container" id="statusContainer"></div>
     <div class="container" id="heapContainer" style="display:none">
-        <h2>Heap current</h2>
+        <h2>heap</h2>
         <div id="heapCurrent"></div>
-        <h2>Trend (hourly)</h2>
+        <h2>trend (hourly)</h2>
         <table>
             <thead id="heapTableHeader"></thead>
             <tbody id="heapTableBody"></tbody>
         </table>
     </div>
     <div class="container" id="tasksContainer" style="display:none">
-        <h2>Stacks</h2>
+        <h2>stacks</h2>
         <table>
             <thead id="threadsTableHeader"></thead>
             <tbody id="threadsTableBody"></tbody>
         </table>
-        <h2>CPU share since last poll (%)</h2>
+        <h2>cpu share since last poll (%)</h2>
         <table>
             <thead id="cpuTableHeader"></thead>
             <tbody id="cpuTableBody"></tbody>
@@ -55,12 +56,16 @@
         function loadSystem() {
             currentView = 'system';
             showView('statusContainer');
-            fetchJson('/api/v1/system', data => renderDetailsSections(data, 'statusContainer'), 'Loading System...');
+            fetchJson('/api/v1/system', data => {
+                renderTables(data, 'statusContainer');
+            }, 'Loading System...');
         }
         function loadNetwork() {
             currentView = 'network';
             showView('statusContainer');
-            fetchJson('/api/v1/network', data => renderDetailsSections(data, 'statusContainer'), 'Loading Network...');
+            fetchJson('/api/v1/network', data => {
+                renderTables(data, 'statusContainer');
+            }, 'Loading Network...');
         }
         function loadHeap() {
             currentView = 'heap';
@@ -76,6 +81,7 @@
         }
         function loadTasks() {
             currentView = 'tasks';
+            showView('tasksContainer');
             fetchJson('/api/v1/system/tasks', data => {
                 renderRows('threadsTableHeader', 'threadsTableBody',
                     ['name', 'stack_size', 'stack_free'], data.threads || []);
@@ -88,33 +94,11 @@
                 document.getElementById(v).style.display = v === id ? '' : 'none';
             }
         }
-        function renderRows(theadId, tbodyId, cols, items) {
-            const thead = document.getElementById(theadId);
-            const tbody = document.getElementById(tbodyId);
-            thead.innerHTML = '';
-            tbody.innerHTML = '';
-            const headerRow = document.createElement('tr');
-            cols.forEach(c => {
-                const th = document.createElement('th');
-                th.textContent = c;
-                headerRow.appendChild(th);
-            });
-            thead.appendChild(headerRow);
-            items.forEach(item => {
-                const tr = document.createElement('tr');
-                cols.forEach(c => {
-                    const td = document.createElement('td');
-                    const v = item[c];
-                    td.textContent = (v === undefined || v === null) ? '' : String(v);
-                    tr.appendChild(td);
-                });
-                tbody.appendChild(tr);
-            });
-        }
         document.getElementById('btnHome').addEventListener('click', handleHome);
-        document.getElementById('btnSystem').addEventListener('click', loadSystem);
+        document.getElementById('btnHealth').addEventListener('click', loadHealth);
         document.getElementById('btnHeap').addEventListener('click', loadHeap);
         document.getElementById('btnTasks').addEventListener('click', loadTasks);
+        document.getElementById('btnSystem').addEventListener('click', loadSystem);
         document.getElementById('btnNetwork').addEventListener('click', loadNetwork);
         document.getElementById('btnRefresh').addEventListener('click', () => {
             // Refresh reloads the currently visible view, not always health.
@@ -126,22 +110,29 @@
         // is actually clicked.
         async function initButtons() {
             const views = [
-                { btn: 'btnSystem', path: '/api/v1/system' },
-                { btn: 'btnNetwork', path: '/api/v1/network' },
+                { btn: 'btnHealth', path: '/api/v1/health', load: loadHealth },
+                { btn: 'btnHeap', path: '/api/v1/system/heap', load: loadHeap },
+                { btn: 'btnTasks', path: '/api/v1/system/tasks', load: loadTasks },
+                { btn: 'btnSystem', path: '/api/v1/system', load: loadSystem },
+                { btn: 'btnNetwork', path: '/api/v1/network', load: loadNetwork },
             ];
+            let first = null;
             for (const v of views) {
                 try {
                     const res = await fetch(v.path);
                     if (!res.ok) throw new Error('unavailable');
+                    if (!first) first = v;
                 } catch (err) {
-                    document.getElementById(v.btn).style.display = 'none';
+                    const el = document.getElementById(v.btn);
+                    if (el) el.style.display = 'none';
                 }
             }
+            // Initial load: health summary if served, else first available.
+            (first ? first.load : () => setStatus('No data endpoints'))();
         }
 
-        // Initial load: health summary + button availability probe
+        // Initial load: button availability probe (+ first view)
         initButtons();
-        loadHealth();
     </script>
 </body>
 
