@@ -15,6 +15,8 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include <cstring>
+
 #include "app/app_limits.hpp"
 #include "app/cron.hpp"
 #include "app/mqtt.hpp"
@@ -126,6 +128,84 @@ esp_err_t SystemApi::handleSystem(httpd_req_t* req) {
       auto logger_scope = writer.objectScope("logger");
       writer.writeField("ring_overwrites", logger.getRingOverwriteCount());
       writer.writeField("print_drops", logger.getPrintDropCount());
+    }
+    {
+      // Per-task CPU share as % of the interval since the last poll
+      // (not cumulative since boot: the U32 esp_timer source wraps
+      // ~every 71min, which made cumulative % grow past 100%).
+      // Unsigned subtraction stays correct across the wrap. First poll
+      // after boot falls back to cumulative (valid inside the first
+      // wrap period); later polls report true intervals.
+      auto cpu = writer.arrayScope("cpu");
+      const UBaseType_t task_count = uxTaskGetNumberOfTasks();
+      auto* states = static_cast<TaskStatus_t*>(
+          heap_caps_malloc(task_count * sizeof(TaskStatus_t), MALLOC_CAP_8BIT));
+      if (states != nullptr) {
+        uint32_t total_time = 0;
+        const UBaseType_t captured =
+            uxTaskGetSystemState(states, task_count, &total_time);
+        struct CpuBaseline {
+          char name[configMAX_TASK_NAME_LEN];
+          uint32_t last;
+        };
+        static portMUX_TYPE cpu_mux = portMUX_INITIALIZER_UNLOCKED;
+        static CpuBaseline baseline[24]{};
+        static size_t baseline_used = 0;
+        static uint32_t last_total = 0;
+        static bool have_total = false;
+        // Computed under one short critical section (no JSON inside),
+        // then emitted below without the lock held.
+        struct CpuRow {
+          char name[configMAX_TASK_NAME_LEN];
+          float pct;
+          uint32_t prio;
+        };
+        CpuRow rows[24]{};
+        size_t nrows = 0;
+        portENTER_CRITICAL(&cpu_mux);
+        const uint32_t delta_total = total_time - last_total;
+        for (UBaseType_t i = 0; i < captured && nrows < 24; ++i) {
+          size_t bi = baseline_used;
+          for (size_t b = 0; b < baseline_used; ++b) {
+            if (std::strncmp(baseline[b].name, states[i].pcTaskName,
+                             configMAX_TASK_NAME_LEN) == 0) {
+              bi = b;
+              break;
+            }
+          }
+          float pct = 0.0f;
+          if (bi < baseline_used && have_total && delta_total > 0) {
+            pct = (100.0f * (states[i].ulRunTimeCounter - baseline[bi].last)) /
+                  delta_total;
+          } else if (!have_total && total_time > 0) {
+            pct = (100.0f * states[i].ulRunTimeCounter) / total_time;
+          }
+          if (bi == baseline_used) {
+            if (baseline_used >= 24) continue;
+            std::strncpy(baseline[bi].name, states[i].pcTaskName,
+                         configMAX_TASK_NAME_LEN - 1);
+            baseline[bi].name[configMAX_TASK_NAME_LEN - 1] = '\0';
+            baseline_used++;
+          }
+          baseline[bi].last = states[i].ulRunTimeCounter;
+          std::strncpy(rows[nrows].name, states[i].pcTaskName,
+                       configMAX_TASK_NAME_LEN - 1);
+          rows[nrows].name[configMAX_TASK_NAME_LEN - 1] = '\0';
+          rows[nrows].pct = pct;
+          rows[nrows].prio = static_cast<uint32_t>(states[i].uxCurrentPriority);
+          nrows++;
+        }
+        last_total = total_time;
+        have_total = true;
+        portEXIT_CRITICAL(&cpu_mux);
+        for (size_t i = 0; i < nrows; ++i) {
+          auto item = writer.objectScope();
+          writer.writeField("name", rows[i].name);
+          writer.writeFieldFloat("pct", rows[i].pct);
+          writer.writeField("prio", rows[i].prio);
+        }
+        heap_caps_free(states);
+      }
     }
   }
   httpd_resp_send_chunk(req, nullptr, 0);
