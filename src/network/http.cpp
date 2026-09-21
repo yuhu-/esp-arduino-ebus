@@ -158,7 +158,7 @@ void SetupHttpHandlers() {
 
 #endif
 
-  RegisterUri("/restart", HTTP_GET, handleRestart);
+  RegisterUri("/restart", HTTP_POST, handleRestart);
 }  // namespace
 
 void SetupHttpFallbackHandlers() {

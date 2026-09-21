@@ -12,6 +12,7 @@ class NetworkApi {
 
  private:
   static esp_err_t handleNetwork(httpd_req_t* req);
+  static esp_err_t handleWifiScan(httpd_req_t* req);
 };
 
 #endif

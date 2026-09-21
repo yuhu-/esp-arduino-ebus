@@ -10,5 +10,4 @@ class ConfigApi {
 
  private:
   static esp_err_t handleConfigPage(httpd_req_t* req);
-  static esp_err_t handleWifiScan(httpd_req_t* req);
 };

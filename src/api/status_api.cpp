@@ -4,7 +4,6 @@
 #include "network/http_utils.hpp"
 
 #if defined(EBUS_INTERNAL)
-#include <esp_heap_caps.h>
 #include <esp_timer.h>
 
 #if __has_include("app/build_info_gen.hpp")
@@ -78,13 +77,6 @@ esp_err_t StatusApi::handleHealth(httpd_req_t* req) {
     writer.writeField("uptime",
                       static_cast<uint64_t>(esp_timer_get_time() / 1000ULL));
     writer.writeField("reset_code", DeviceStatus::resetCode());
-    {
-      auto heap = writer.objectScope("heap");
-      multi_heap_info_t info;
-      heap_caps_get_info(&info, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-      writer.writeField("free", info.total_free_bytes);
-      writer.writeField("min", info.minimum_free_bytes);
-    }
     writer.writeField("rssi", WifiNetworkManager::RSSI());
     writer.writeField("wifi_reconnects",
                       WifiNetworkManager::getReconnectCount());

@@ -25,7 +25,6 @@ ENDPOINTS = [
     "api/v1/network",
     "api/v1/devices",
     "api/v1/metrics/lib",
-    "api/v1/metrics/app",
     "api/v1/app/values",
     "api/v1/app/logs",
     "api/v1/app/config",
