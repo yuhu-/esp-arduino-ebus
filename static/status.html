@@ -13,51 +13,135 @@
     <div class="controls">
         <button id="btnHome">Home</button>
         <button id="btnSystem">System</button>
+        <button id="btnHeap">Heap</button>
+        <button id="btnTasks">Tasks</button>
         <button id="btnNetwork">Network</button>
-        <button id="btnBus">Bus</button>
+        <button id="btnRefresh" style="margin-left:auto;">Refresh</button>
         <span id="status">...</span>
     </div>
     <div class="container" id="statusContainer"></div>
+    <div class="container" id="heapContainer" style="display:none">
+        <h2>Heap current</h2>
+        <div id="heapCurrent"></div>
+        <h2>Trend (hourly)</h2>
+        <table>
+            <thead id="heapTableHeader"></thead>
+            <tbody id="heapTableBody"></tbody>
+        </table>
+    </div>
+    <div class="container" id="tasksContainer" style="display:none">
+        <h2>Stacks</h2>
+        <table>
+            <thead id="threadsTableHeader"></thead>
+            <tbody id="threadsTableBody"></tbody>
+        </table>
+        <h2>CPU share since last poll (%)</h2>
+        <table>
+            <thead id="cpuTableHeader"></thead>
+            <tbody id="cpuTableBody"></tbody>
+        </table>
+    </div>
     <script src="common.js"></script>
     <script>
+        let currentView = 'health';
+        const viewLoaders = { health: loadHealth, system: loadSystem, network: loadNetwork, heap: loadHeap, tasks: loadTasks };
+        function loadHealth() {
+            currentView = 'health';
+            showView('statusContainer');
+            fetchJson('/api/v1/health', data => {
+                renderSummaryTable(data, 'statusContainer');
+            }, 'Checking health...');
+        }
         function loadSystem() {
-            fetchJson('/api/v1/system', data => renderNestedSections(data, 'statusContainer'));
+            currentView = 'system';
+            showView('statusContainer');
+            fetchJson('/api/v1/system', data => renderDetailsSections(data, 'statusContainer'), 'Loading System...');
         }
         function loadNetwork() {
-            fetchJson('/api/v1/network', data => renderNestedSections(data, 'statusContainer'));
+            currentView = 'network';
+            showView('statusContainer');
+            fetchJson('/api/v1/network', data => renderDetailsSections(data, 'statusContainer'), 'Loading Network...');
         }
-        function loadBus() {
-            fetchJson('/api/v1/bus', data => renderNestedSections(data, 'statusContainer', true));
+        function loadHeap() {
+            currentView = 'heap';
+            showView('heapContainer');
+            fetchJson('/api/v1/system/heap', data => {
+                const cur = data.current || {};
+                document.getElementById('heapCurrent').textContent =
+                    `free: ${cur.free} / largest: ${cur.largest} / min: ${cur.min}`;
+                const trend = data.trend || [];
+                const cols = ['uptime', 'free', 'min', 'largest'];
+                renderRows('heapTableHeader', 'heapTableBody', cols, trend);
+            }, 'Loading Heap...');
+        }
+        function loadTasks() {
+            currentView = 'tasks';
+            fetchJson('/api/v1/system/tasks', data => {
+                renderRows('threadsTableHeader', 'threadsTableBody',
+                    ['name', 'stack_size', 'stack_free'], data.threads || []);
+                renderRows('cpuTableHeader', 'cpuTableBody',
+                    ['name', 'pct', 'prio'], data.cpu || []);
+            }, 'Loading Tasks...');
+        }
+        function showView(id) {
+            for (const v of ['statusContainer', 'heapContainer', 'tasksContainer']) {
+                document.getElementById(v).style.display = v === id ? '' : 'none';
+            }
+        }
+        function renderRows(theadId, tbodyId, cols, items) {
+            const thead = document.getElementById(theadId);
+            const tbody = document.getElementById(tbodyId);
+            thead.innerHTML = '';
+            tbody.innerHTML = '';
+            const headerRow = document.createElement('tr');
+            cols.forEach(c => {
+                const th = document.createElement('th');
+                th.textContent = c;
+                headerRow.appendChild(th);
+            });
+            thead.appendChild(headerRow);
+            items.forEach(item => {
+                const tr = document.createElement('tr');
+                cols.forEach(c => {
+                    const td = document.createElement('td');
+                    const v = item[c];
+                    td.textContent = (v === undefined || v === null) ? '' : String(v);
+                    tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            });
         }
         document.getElementById('btnHome').addEventListener('click', handleHome);
         document.getElementById('btnSystem').addEventListener('click', loadSystem);
+        document.getElementById('btnHeap').addEventListener('click', loadHeap);
+        document.getElementById('btnTasks').addEventListener('click', loadTasks);
         document.getElementById('btnNetwork').addEventListener('click', loadNetwork);
-        document.getElementById('btnBus').addEventListener('click', loadBus);
+        document.getElementById('btnRefresh').addEventListener('click', () => {
+            // Refresh reloads the currently visible view, not always health.
+            (viewLoaders[currentView] || loadHealth)();
+        });
 
-        // Probe endpoints first: internal-only clusters 404 on bridge
-        // builds, so hide what isn't served instead of showing errors.
-        async function initViews() {
+        // Probe endpoints once to hide unavailable buttons (internal-only
+        // clusters 404 on bridge builds). No data is fetched until a button
+        // is actually clicked.
+        async function initButtons() {
             const views = [
-                { btn: 'btnSystem', path: '/api/v1/system', load: loadSystem },
-                { btn: 'btnNetwork', path: '/api/v1/network', load: loadNetwork },
-                { btn: 'btnBus', path: '/api/v1/bus', load: loadBus },
+                { btn: 'btnSystem', path: '/api/v1/system' },
+                { btn: 'btnNetwork', path: '/api/v1/network' },
             ];
-            let first = null;
             for (const v of views) {
                 try {
                     const res = await fetch(v.path);
                     if (!res.ok) throw new Error('unavailable');
-                    if (!first) first = v;
                 } catch (err) {
                     document.getElementById(v.btn).style.display = 'none';
                 }
             }
-            if (first) first.load();
-            else setStatus('No data endpoints');
         }
 
-        // Initial load
-        initViews();
+        // Initial load: health summary + button availability probe
+        initButtons();
+        loadHealth();
     </script>
 </body>
 

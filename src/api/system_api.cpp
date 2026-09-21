@@ -37,6 +37,8 @@ bool SystemApi::registerHandlers(httpd_handle_t server) {
   if (server == nullptr) return false;
 
   RegisterUri("/api/v1/system", HTTP_GET, handleSystem);
+  RegisterUri("/api/v1/system/heap", HTTP_GET, handleHeap);
+  RegisterUri("/api/v1/system/tasks", HTTP_GET, handleTasks);
 
   return true;
 }
@@ -79,18 +81,37 @@ esp_err_t SystemApi::handleSystem(httpd_req_t* req) {
                       static_cast<uint64_t>(esp_timer_get_time() / 1000ULL));
     writer.writeField("reset_code", DeviceStatus::resetCode());
     {
-      auto heap = writer.objectScope("heap");
+      auto logger_scope = writer.objectScope("logger");
+      writer.writeField("ring_overwrites", logger.getRingOverwriteCount());
+      writer.writeField("print_drops", logger.getPrintDropCount());
+    }
+  }
+  httpd_resp_send_chunk(req, nullptr, 0);
+  return ESP_OK;
+}
+
+// Current values + hourly trend samples (leak/fragmentation instrument).
+// Object shape; the page renders current plus the trend table.
+esp_err_t SystemApi::handleHeap(httpd_req_t* req) {
+  httpd_resp_set_type(req, "application/json;charset=utf-8");
+  HttpUtils::applyCustomHeaders(req);
+  ebus::detail::JsonWriter writer([req](std::string_view chunk) {
+    httpd_resp_send_chunk(req, chunk.data(), chunk.size());
+  });
+  SystemMonitor::HeapSample trend[SystemMonitor::heap_trend_capacity];
+  size_t n = DeviceStatus::monitor().fetchHeapTrend(
+      trend, SystemMonitor::heap_trend_capacity);
+  {
+    auto scope = writer.objectScope();
+    {
+      auto current = writer.objectScope("current");
       multi_heap_info_t info;
       heap_caps_get_info(&info, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-      {
-        auto current = writer.objectScope("current");
-        writer.writeField("free", info.total_free_bytes);
-        writer.writeField("largest", info.largest_free_block);
-        writer.writeField("min", info.minimum_free_bytes);
-      }
-      SystemMonitor::HeapSample trend[SystemMonitor::heap_trend_capacity];
-      size_t n = DeviceStatus::monitor().fetchHeapTrend(
-          trend, SystemMonitor::heap_trend_capacity);
+      writer.writeField("free", info.total_free_bytes);
+      writer.writeField("largest", info.largest_free_block);
+      writer.writeField("min", info.minimum_free_bytes);
+    }
+    {
       auto arr = writer.arrayScope("trend");
       for (size_t i = 0; i < n; ++i) {
         auto item = writer.objectScope();
@@ -100,16 +121,33 @@ esp_err_t SystemApi::handleSystem(httpd_req_t* req) {
         writer.writeField("largest", trend[i].largest_block);
       }
     }
+  }
+  httpd_resp_send_chunk(req, nullptr, 0);
+  return ESP_OK;
+}
+
+// Per-task stacks + CPU shares (who starves the bus thread?).
+// Object of two arrays; the page renders one table each.
+esp_err_t SystemApi::handleTasks(httpd_req_t* req) {
+  httpd_resp_set_type(req, "application/json;charset=utf-8");
+  HttpUtils::applyCustomHeaders(req);
+  ebus::detail::JsonWriter writer([req](std::string_view chunk) {
+    httpd_resp_send_chunk(req, chunk.data(), chunk.size());
+  });
+  {
+    auto scope = writer.objectScope();
     {
       auto threads = writer.arrayScope("threads");
       auto addThread = [&](const char* name, TaskHandle_t handle,
                            uint32_t stack_size) {
         if (!handle) return;
-        ebus::ThreadStatus ts(
-            name, static_cast<int32_t>(stack_size),
-            static_cast<int32_t>(uxTaskGetStackHighWaterMark(handle) *
-                                 sizeof(StackType_t)));
-        writer.writeValue(ts);
+        auto item = writer.objectScope();
+        writer.writeField("name", name);
+        writer.writeField("stack_size", stack_size);
+        writer.writeField(
+            "stack_free",
+            static_cast<uint32_t>(uxTaskGetStackHighWaterMark(handle) *
+                                  sizeof(StackType_t)));
       };
       addThread("mqtt", DeviceStatus::mqtt().getTaskHandle(),
                 app::limits::Task::mqtt_stack);
@@ -123,11 +161,6 @@ esp_err_t SystemApi::handleSystem(httpd_req_t* req) {
                 app::limits::Task::status_led_stack);
       addThread("system_monitor", DeviceStatus::monitor().task_handle(),
                 app::limits::Task::system_monitor_stack);
-    }
-    {
-      auto logger_scope = writer.objectScope("logger");
-      writer.writeField("ring_overwrites", logger.getRingOverwriteCount());
-      writer.writeField("print_drops", logger.getPrintDropCount());
     }
     {
       // Per-task CPU share as % of the interval since the last poll

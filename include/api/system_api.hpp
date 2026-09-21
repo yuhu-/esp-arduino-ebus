@@ -12,6 +12,8 @@ class SystemApi {
 
  private:
   static esp_err_t handleSystem(httpd_req_t* req);
+  static esp_err_t handleHeap(httpd_req_t* req);
+  static esp_err_t handleTasks(httpd_req_t* req);
 };
 
 #endif
