@@ -315,6 +315,7 @@ function renderSummaryTable(data, containerId) {
     container.innerHTML = '';
 
     const table = document.createElement('table');
+    table.classList.add('kv');
     const thead = document.createElement('thead');
     const headerRow = document.createElement('tr');
     ['metric', 'value'].forEach(h => {
@@ -436,8 +437,10 @@ function renderDetailsSections(data, containerId) {
  * collapsed sections: every value visible without clicking.
  * @param {object} data - The JSON object to render.
  * @param {string} containerId - ID of the container element.
+ * @param {boolean} [alignFirst=false] - Align first columns page-wide
+ * (adds the "kv" class); use for stacked tables sharing a column.
  */
-function renderTables(data, containerId) {
+function renderTables(data, containerId, alignFirst = false) {
     const container = document.getElementById(containerId);
     container.innerHTML = '';
     function formatCell(v) {
@@ -450,6 +453,7 @@ function renderTables(data, containerId) {
         h.textContent = title;
         container.appendChild(h);
         const table = document.createElement('table');
+        if (cols.length === 2) table.classList.add('kv');
         const thead = document.createElement('thead');
         const headerRow = document.createElement('tr');
         cols.forEach(c => {
@@ -501,10 +505,14 @@ function renderTables(data, containerId) {
  * @param {string} tbodyId - ID of the <tbody> element.
  * @param {Array<string>} cols - Column keys, in order.
  * @param {Array<object>} items - Row objects.
+ * @param {boolean} [alignFirst=false] - Align first column page-wide
+ * (adds the "kv" class); use for stacked tables sharing a column.
  */
-function renderRows(theadId, tbodyId, cols, items) {
+function renderRows(theadId, tbodyId, cols, items, alignFirst = false) {
     const thead = document.getElementById(theadId);
     const tbody = document.getElementById(tbodyId);
+    const table = thead.closest('table');
+    if (table && (alignFirst || cols.length === 2)) table.classList.add('kv');
     thead.innerHTML = '';
     tbody.innerHTML = '';
     const headerRow = document.createElement('tr');

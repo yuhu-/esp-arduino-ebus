@@ -99,9 +99,9 @@
         function loadTasks() {
             loadView('tasks', 'btnTasks', 'tasksContainer', '/api/v1/system/tasks', data => {
                 renderRows('threadsTableHeader', 'threadsTableBody',
-                    ['name', 'stack_size', 'stack_free'], data.threads || []);
+                    ['name', 'stack_size', 'stack_free'], data.threads || [], true);
                 renderRows('cpuTableHeader', 'cpuTableBody',
-                    ['name', 'pct', 'prio'], data.cpu || []);
+                    ['name', 'pct', 'prio'], data.cpu || [], true);
             });
         }
         function showView(id) {
