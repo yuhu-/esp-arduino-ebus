@@ -45,49 +45,64 @@
     <script src="common.js"></script>
     <script>
         let currentView = 'health';
-        const viewLoaders = { health: loadHealth, system: loadSystem, network: loadNetwork, heap: loadHeap, tasks: loadTasks };
+        const availability = {};
+        // Lazy probe: the first click on a button both checks availability
+        // (hides the button on bridge builds) and renders the response —
+        // one GET, no 5-way salvo on page open.
+        async function loadView(name, btn, container, path, render) {
+            currentView = name;
+            if (availability[btn] === false) return;
+            showView(container);
+            setStatus('Loading...');
+            try {
+                const res = await fetch(path);
+                if (!res.ok) throw new Error('unavailable');
+                availability[btn] = true;
+                render(await res.json());
+                setStatus('Fetched');
+            } catch (err) {
+                availability[btn] = false;
+                document.getElementById(btn).style.display = 'none';
+                setStatus('Unavailable');
+                console.error(err);
+            }
+        }
+        const viewLoaders = {
+            health: loadHealth, system: loadSystem, network: loadNetwork,
+            heap: loadHeap, tasks: loadTasks,
+        };
         function loadHealth() {
-            currentView = 'health';
-            showView('statusContainer');
-            fetchJson('/api/v1/health', data => {
+            loadView('health', 'btnHealth', 'statusContainer', '/api/v1/health', data => {
                 renderSummaryTable(data, 'statusContainer');
-            }, 'Checking health...');
+            });
         }
         function loadSystem() {
-            currentView = 'system';
-            showView('statusContainer');
-            fetchJson('/api/v1/system', data => {
+            loadView('system', 'btnSystem', 'statusContainer', '/api/v1/system', data => {
                 renderTables(data, 'statusContainer');
-            }, 'Loading System...');
+            });
         }
         function loadNetwork() {
-            currentView = 'network';
-            showView('statusContainer');
-            fetchJson('/api/v1/network', data => {
+            loadView('network', 'btnNetwork', 'statusContainer', '/api/v1/network', data => {
                 renderTables(data, 'statusContainer');
-            }, 'Loading Network...');
+            });
         }
         function loadHeap() {
-            currentView = 'heap';
-            showView('heapContainer');
-            fetchJson('/api/v1/system/heap', data => {
+            loadView('heap', 'btnHeap', 'heapContainer', '/api/v1/system/heap', data => {
                 const cur = data.current || {};
                 document.getElementById('heapCurrent').textContent =
-                    `free: ${cur.free} / largest: ${cur.largest} / min: ${cur.min}`;
+                    `free: ${cur.free} / min: ${cur.min} / largest: ${cur.largest}`;
                 const trend = data.trend || [];
                 const cols = ['uptime', 'free', 'min', 'largest'];
                 renderRows('heapTableHeader', 'heapTableBody', cols, trend);
-            }, 'Loading Heap...');
+            });
         }
         function loadTasks() {
-            currentView = 'tasks';
-            showView('tasksContainer');
-            fetchJson('/api/v1/system/tasks', data => {
+            loadView('tasks', 'btnTasks', 'tasksContainer', '/api/v1/system/tasks', data => {
                 renderRows('threadsTableHeader', 'threadsTableBody',
                     ['name', 'stack_size', 'stack_free'], data.threads || []);
                 renderRows('cpuTableHeader', 'cpuTableBody',
                     ['name', 'pct', 'prio'], data.cpu || []);
-            }, 'Loading Tasks...');
+            });
         }
         function showView(id) {
             for (const v of ['statusContainer', 'heapContainer', 'tasksContainer']) {
@@ -105,34 +120,10 @@
             (viewLoaders[currentView] || loadHealth)();
         });
 
-        // Probe endpoints once to hide unavailable buttons (internal-only
-        // clusters 404 on bridge builds). No data is fetched until a button
-        // is actually clicked.
-        async function initButtons() {
-            const views = [
-                { btn: 'btnHealth', path: '/api/v1/health', load: loadHealth },
-                { btn: 'btnHeap', path: '/api/v1/system/heap', load: loadHeap },
-                { btn: 'btnTasks', path: '/api/v1/system/tasks', load: loadTasks },
-                { btn: 'btnSystem', path: '/api/v1/system', load: loadSystem },
-                { btn: 'btnNetwork', path: '/api/v1/network', load: loadNetwork },
-            ];
-            let first = null;
-            for (const v of views) {
-                try {
-                    const res = await fetch(v.path);
-                    if (!res.ok) throw new Error('unavailable');
-                    if (!first) first = v;
-                } catch (err) {
-                    const el = document.getElementById(v.btn);
-                    if (el) el.style.display = 'none';
-                }
-            }
-            // Initial load: health summary if served, else first available.
-            (first ? first.load : () => setStatus('No data endpoints'))();
-        }
+        // Initial load: health only. Other views probe lazily on
+        // first click (see loadView); nothing else is fetched.
+        loadHealth();
 
-        // Initial load: button availability probe (+ first view)
-        initButtons();
     </script>
 </body>
 
