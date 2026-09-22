@@ -21,7 +21,10 @@ import urllib.request
 host, out = sys.argv[1], sys.argv[2]
 
 ENDPOINTS = [
+    "api/v1/health",
     "api/v1/system",
+    "api/v1/system/heap",
+    "api/v1/system/tasks",
     "api/v1/network",
     "api/v1/devices",
     "api/v1/metrics",
