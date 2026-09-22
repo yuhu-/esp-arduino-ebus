@@ -195,6 +195,10 @@ void WifiNetworkManager::begin(ConfigManager* configManager) {
   snprintf(buf, sizeof(buf), "Connecting STA to SSID: %s", staSsid.c_str());
   logger.info(buf);
   setStatusLedMode(StatusLedMode::SlowBlink);
+  // No modem sleep on a mains-powered bus adapter: DTIM-gated RX adds
+  // up to hundreds of ms link jitter and wake bursts preempt everything
+  // below WiFi priority (including the bus thread) at the worst moment.
+  esp_wifi_set_ps(WIFI_PS_NONE);
   esp_wifi_connect();
 }
 
