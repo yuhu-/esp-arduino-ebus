@@ -79,6 +79,10 @@ class Logger {
   LogEntry buffer_[max_entries];
   size_t index_;
   size_t entries_;
+  // Runtime ring capacity (<= max_entries): the ctor parameter finally
+  // takes effect here instead of being ignored. Runtime value also keeps
+  // static analyzers from folding the modulo below into a constant.
+  size_t capacity_;
 
   static const char* logLevelText(LogLevel logLevel);
 

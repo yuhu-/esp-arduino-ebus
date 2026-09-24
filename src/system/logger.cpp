@@ -14,6 +14,8 @@ Logger logger;
 Logger::Logger(size_t maxEntries)
     : index_(0),
       entries_(0),
+      capacity_(maxEntries > 0 && maxEntries <= max_entries ? maxEntries
+                                                            : max_entries),
       mux_(portMUX_INITIALIZER_UNLOCKED),
       print_queue_(xQueueCreate(print_queue_entries, print_msg_length)),
       print_task_(nullptr) {
@@ -81,7 +83,7 @@ void Logger::fetchLogs(const ebus::JsonChunkVisitor& visitor,
 
     for (size_t i = 0; i < current_entries; i++) {
       const size_t logIndex =
-          (current_index - current_entries + i + max_entries) % max_entries;
+          (current_index - current_entries + i + capacity_) % capacity_;
       LogEntry entry;
       portENTER_CRITICAL(&mux_);
       entry = buffer_[logIndex];
@@ -167,8 +169,8 @@ void Logger::log(LogLevel level, std::string_view message, bool is_json,
   buffer_[index_].is_json_message = is_json;
   buffer_[index_].session_id = session_id;
   buffer_[index_].poll_id = poll_id;
-  index_ = (index_ + 1) % max_entries;
-  if (entries_ < max_entries) {
+  index_ = (index_ + 1) % capacity_;
+  if (entries_ < capacity_) {
     entries_++;
   } else {
     ring_overwrites_.fetch_add(1, std::memory_order_relaxed);

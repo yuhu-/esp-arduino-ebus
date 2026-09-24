@@ -40,9 +40,9 @@ bool AppConfig::isValid() const {
   if (bus.window_us < app::limits::Bus::window_min_us ||
       bus.window_us > app::limits::Bus::window_max_us)
     return false;
-  if (bus.offset_us < app::limits::Bus::offset_min_us ||
-      bus.offset_us > app::limits::Bus::offset_max_us)
-    return false;
+  // Note: offset_min_us is 0 and offset_us unsigned, so only the upper
+  // bound is checked (a `< min` comparison would be dead code).
+  if (bus.offset_us > app::limits::Bus::offset_max_us) return false;
 
   return true;
 }
