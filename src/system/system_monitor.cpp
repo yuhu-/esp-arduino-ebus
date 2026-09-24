@@ -22,7 +22,15 @@ constexpr size_t log_queue_size = 8;
 constexpr size_t protocol_queue_size = 8;
 
 struct LogRequestItem {
-  uint8_t key_id;
+  // key_id != 0: decoded command log request (existing path).
+  // key_id == 0: raw telegram — every correctly received message, logged
+  // as-is (master hex + optional slave hex), whether or not a configured
+  // command matches it.
+  uint8_t key_id = 0;
+  ebus::StaticSequence<64> master;
+  ebus::StaticSequence<64> slave;
+  uint32_t session_id = 0;
+  uint16_t poll_id = 0;
 };
 
 struct ProtocolInfoItem {
@@ -182,14 +190,21 @@ void SystemMonitor::taskLoop() {
 void SystemMonitor::processLogRequests() {
   LogRequestItem req;
   while (xQueueReceive(log_queue_, &req, 0) == pdTRUE) {
+    if (req.key_id == 0) {
+      // Raw telegram: raw bytes only, no decoding or type tags.
+      logRawTelegram(ebus::ByteView(req.master.data(), req.master.size()),
+                     ebus::ByteView(req.slave.data(), req.slave.size()),
+                     req.session_id, req.poll_id);
+      continue;
+    }
     std::string_view key = StringPool::instance().lookup(req.key_id);
     const Command* cmd = commandManager.findCommand(key);
     if (cmd != nullptr) {
       char buf[256];
       size_t len = cmd->writeLogMessage(buf, sizeof(buf));
       if (len > 0) {
-        logger.debug(std::string_view(buf, len), false, cmd->getSessionId(),
-                     cmd->getPollId());
+        logger.info(std::string_view(buf, len), false, cmd->getSessionId(),
+                    cmd->getPollId());
       }
     }
   }
@@ -213,8 +228,58 @@ void SystemMonitor::processProtocolInfo() {
     if (item.info.is_error) {
       Mqtt::publishError(item.info);
     } else {
+      // Every correctly received message is queued for logging, whether
+      // or not a configured command matches it (unmatched telegrams
+      // previously vanished silently inside updateData). Formatting
+      // happens in processLogRequests; this path stays a memcpy.
+      enqueueTelegram(item.info.master_view, item.info.slave_view,
+                      item.info.session_id, item.info.poll_id);
       commandManager.updateData(item.info);
     }
+  }
+}
+
+void SystemMonitor::enqueueTelegram(ebus::ByteView master, ebus::ByteView slave,
+                                    uint32_t session_id, uint16_t poll_id) {
+  if (log_queue_ == nullptr) return;
+
+  LogRequestItem req{};
+  if (!master.empty()) req.master.assign(master.data(), master.size());
+  if (!slave.empty()) req.slave.assign(slave.data(), slave.size());
+  req.session_id = session_id;
+  req.poll_id = poll_id;
+  xQueueSend(log_queue_, &req, 0);
+  if (task_handle_ != nullptr) {
+    xTaskNotifyGive(task_handle_);
+  }
+}
+
+// Raw telegram line: master hex + optional slave hex, nothing else.
+// (Timestamp/level prefix is added by the logger itself.)
+void SystemMonitor::logRawTelegram(ebus::ByteView master, ebus::ByteView slave,
+                                   uint32_t session_id, uint16_t poll_id) {
+  char buf[256];
+  char* p = buf;
+  const char* end_buf = buf + sizeof(buf);
+
+  static constexpr char hex_chars[] = "0123456789abcdef";
+  auto appendHex = [&](ebus::ByteView data) {
+    for (uint8_t b : data) {
+      if (p + 2 >= end_buf) break;
+      *p++ = hex_chars[b >> 4];
+      *p++ = hex_chars[b & 0xf];
+    }
+  };
+
+  appendHex(master);
+  if (!slave.empty()) {
+    if (p < end_buf - 1) *p++ = ' ';
+    appendHex(slave);
+  }
+
+  if (p > buf) {
+    logger.debug(std::string_view(buf, static_cast<size_t>(p - buf)), false,
+                 session_id, poll_id);
   }
 }
 
