@@ -34,7 +34,9 @@ class App {
   // Loads NVS contents into the owned snapshot. Caller must have called
   // ConfigManager::begin() first. Returns loader result.
   bool loadConfig();
-
+  // Startup config summary to the console (secrets redacted to presence
+  // markers). Proves what the boot actually runs on.
+  void logConfig() const;
   // Applies a flat NVS-key JSON object (as posted by /api/v1/config) onto a
   // copy of the snapshot, validates it and persists via
   // AppConfigLoader::save(). Unknown keys are stored to NVS directly,

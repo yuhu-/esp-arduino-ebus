@@ -404,7 +404,35 @@ bool App::startTasks() {
 
 bool App::loadConfig() {
   AppConfigLoader loader(config_manager_);
-  return loader.load(config_);
+  if (!loader.load(config_)) return false;
+  logConfig();
+  return true;
+}
+
+// Startup config summary for the console: everything the boot depends
+// on, with secrets redacted to presence markers (never values — the
+// console is captured into logs).
+void App::logConfig() const {
+  const AppConfig& c = config_;
+  char buf[512];
+  const int n = std::snprintf(
+      buf, sizeof(buf),
+      "config: wifi ssid='%.*s' pass=%s bssid='%.*s' static=%s ip=%.*s "
+      "mqtt=%s server='%.*s' user='%.*s' pass=%s ha=%s pwm=%u "
+      "ebus addr=%.*s window=%u offset=%u",
+      (int)c.network.wifi_ssid.size(), c.network.wifi_ssid.c_str(),
+      c.network.wifi_password.empty() ? "(empty)" : "(set)",
+      (int)c.network.wifi_bssid.size(), c.network.wifi_bssid.c_str(),
+      c.network.static_ip_enabled ? "true" : "false",
+      (int)c.network.ip_address.size(), c.network.ip_address.c_str(),
+      c.mqtt.enabled ? "true" : "false",
+      (int)c.mqtt.server.size(), c.mqtt.server.c_str(),
+      (int)c.mqtt.user.size(), c.mqtt.user.c_str(),
+      c.mqtt.pass.empty() ? "(empty)" : "(set)",
+      c.mqtt_ha.enabled ? "true" : "false", (unsigned)c.pwm.value,
+      (int)c.bus.address.size(), c.bus.address.c_str(),
+      (unsigned)c.bus.window_us, (unsigned)c.bus.offset_us);
+  if (n > 0) logger.info(std::string_view(buf, static_cast<size_t>(n)));
 }
 
 bool App::applyFlatConfigJson(std::string_view body, std::string& error) {
