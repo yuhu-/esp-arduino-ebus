@@ -3,6 +3,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include <algorithm>
 #include <cstdlib>
 
 #include "config/app_config_loader.hpp"
@@ -44,16 +45,16 @@ App::App(ConfigManager& config_manager) : config_manager_(config_manager) {
 App* App::instance() { return instance_; }
 
 bool App::begin() {
-  if (!initPlatform()) return false;
+  initPlatform();
   if (!initConfig()) return false;
-  if (!initNetwork()) return false;
+  initNetwork();
   if (!initServices()) return false;
-  if (!initHttp()) return false;
+  initHttp();
   if (!startTasks()) return false;
   return true;
 }
 
-bool App::initPlatform() {
+void App::initPlatform() {
   check_reset();
 
   calcUniqueId();
@@ -74,8 +75,6 @@ bool App::initPlatform() {
 #if defined(PWM_PIN)
   initPwm();
 #endif
-
-  return true;
 }
 
 bool App::initConfig() {
@@ -85,10 +84,9 @@ bool App::initConfig() {
   return true;
 }
 
-bool App::initNetwork() {
+void App::initNetwork() {
   WifiNetworkManager::begin(&config_manager_);
   startCaptiveDns();
-  return true;
 }
 
 #if defined(EBUS_INTERNAL)
@@ -372,7 +370,7 @@ bool App::initServices() {
 #endif
 }
 
-bool App::initHttp() {
+void App::initHttp() {
 #if defined(EBUS_INTERNAL)
   SetupHttpHandlers(mqtt_ha_);
 #else
@@ -384,7 +382,6 @@ bool App::initHttp() {
   SetupHttpFallbackHandlers();
   upgrade_manager_.setPreUpgradeHook([this]() { stop(); });
   esp_ota_manager_.setPreUpgradeHook([this]() { stop(); });
-  return true;
 }
 
 bool App::startTasks() {
@@ -422,11 +419,15 @@ bool App::applyFlatConfigJson(std::string_view body, std::string& error) {
     return false;
   }
   // Preserve legacy behavior: unknown keys are stored to NVS directly.
-  for (const auto& kv : unknowns) {
-    if (!config_manager_.writeString(kv.first.c_str(), kv.second)) {
-      error = "Failed to write NVS";
-      return false;
-    }
+  // all_of short-circuits on the first failure exactly like the loop it
+  // replaces; the error is set once outside the predicate.
+  const bool unknowns_ok =
+      std::all_of(unknowns.begin(), unknowns.end(), [this](const auto& kv) {
+        return config_manager_.writeString(kv.first.c_str(), kv.second);
+      });
+  if (!unknowns_ok) {
+    error = "Failed to write NVS";
+    return false;
   }
   // No live swap: the UI contract is restart-to-apply, so the snapshot keeps
   // boot values (matching the running services) until the next reboot loads

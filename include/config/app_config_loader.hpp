@@ -7,7 +7,7 @@
 
 class AppConfigLoader {
  public:
-  AppConfigLoader(ConfigManager& config_manager)
+  explicit AppConfigLoader(ConfigManager& config_manager)
       : config_manager_(config_manager) {}
 
   /**

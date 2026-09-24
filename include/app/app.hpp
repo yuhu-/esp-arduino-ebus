@@ -26,8 +26,9 @@ class App {
   bool begin();
   // Main supervision loop. Never returns: the main task owns this App
   // instance, so returning would delete the task and free its stack while
-  // service tasks still reference it.
-  void loop();
+  // service tasks still reference it. Static: the loop body uses no
+  // instance state (pure delay keeps the task alive).
+  static void loop();
   void stop();
 
   // Loads NVS contents into the owned snapshot. Caller must have called
@@ -56,11 +57,13 @@ class App {
 
   // Init phases, executed in order by begin(). Each phase owns one slice of
   // the former app_main inline sequence; begin() short-circuits on failure.
-  bool initPlatform();
+  // Infallible phases are void (platform/network/http setup cannot fail);
+  // only config/services/tasks report failure.
+  void initPlatform();
   bool initConfig();
-  bool initNetwork();
+  void initNetwork();
   bool initServices();
-  bool initHttp();
+  void initHttp();
   bool startTasks();
 
 #if defined(EBUS_INTERNAL)
