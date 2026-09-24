@@ -11,7 +11,7 @@ class CommandsApi {
  public:
   explicit CommandsApi(CommandManager& command_manager, MqttHA& mqtt_ha);
 
-  bool registerHandlers(httpd_handle_t server);
+  static bool registerHandlers(httpd_handle_t server);
 
  private:
   CommandManager& command_manager_;

@@ -10,7 +10,7 @@ class ValuesApi {
  public:
   explicit ValuesApi(CommandManager& command_manager);
 
-  bool registerHandlers(httpd_handle_t server);
+  static bool registerHandlers(httpd_handle_t server);
 
  private:
   CommandManager& command_manager_;

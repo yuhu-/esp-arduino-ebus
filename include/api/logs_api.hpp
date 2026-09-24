@@ -10,7 +10,7 @@ class LogsApi {
  public:
   explicit LogsApi(Logger& logger);
 
-  bool registerHandlers(httpd_handle_t server);
+  static bool registerHandlers(httpd_handle_t server);
 
  private:
   Logger& logger_;

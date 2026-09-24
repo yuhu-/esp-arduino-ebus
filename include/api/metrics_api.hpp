@@ -8,7 +8,7 @@ class MetricsApi {
  public:
   explicit MetricsApi();
 
-  bool registerHandlers(httpd_handle_t server);
+  static bool registerHandlers(httpd_handle_t server);
 
  private:
   static esp_err_t handleMetricsPage(httpd_req_t* req);

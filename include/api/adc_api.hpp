@@ -8,7 +8,7 @@ class AdcApi {
  public:
   explicit AdcApi(Adc& adc);
 
-  bool registerHandlers(httpd_handle_t server);
+  static bool registerHandlers(httpd_handle_t server);
 
  private:
   Adc& adc_;
