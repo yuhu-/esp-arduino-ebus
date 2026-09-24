@@ -48,8 +48,13 @@ bool App::begin() {
   initPlatform();
   if (!initConfig()) return false;
   initNetwork();
+  // cppcheck-suppress knownConditionTrueFalse -- reachable: controller
+  // configuration and (unconditional) LittleFS init return false above.
   if (!initServices()) return false;
   initHttp();
+  // cppcheck-suppress knownConditionTrueFalse -- reachable in bridge mode:
+  // client runtime fails on socket/task creation (single-TU analysis with
+  // EBUS_INTERNAL only sees the always-true branch).
   if (!startTasks()) return false;
   return true;
 }
