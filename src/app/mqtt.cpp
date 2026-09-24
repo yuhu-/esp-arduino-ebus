@@ -837,14 +837,14 @@ void Mqtt::publishResponse(std::string_view id, std::string_view status,
   });
 }
 
-void appendMqttStatus(ebus::detail::JsonWriter& w,
+void appendMqttStatus(ebus::detail::JsonWriter& writer,
                       const AppConfig::Mqtt& mqtt_config) {
-  w.writeField("enabled",
-               Mqtt::instance_ != nullptr && Mqtt::instance_->isEnabled());
-  w.writeField("server", mqtt_config.server.c_str());
-  w.writeField("user", mqtt_config.user.c_str());
-  w.writeField("connected",
-               Mqtt::instance_ != nullptr && Mqtt::instance_->isConnected());
+  writer.writeField("enabled",
+                    Mqtt::instance_ != nullptr && Mqtt::instance_->isEnabled());
+  writer.writeField("server", mqtt_config.server.c_str());
+  writer.writeField("user", mqtt_config.user.c_str());
+  writer.writeField("connected", Mqtt::instance_ != nullptr &&
+                                     Mqtt::instance_->isConnected());
 }
 
 #endif
