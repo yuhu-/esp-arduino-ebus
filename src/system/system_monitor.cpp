@@ -254,7 +254,9 @@ void SystemMonitor::enqueueTelegram(ebus::ByteView master, ebus::ByteView slave,
   }
 }
 
-// Raw telegram line: master hex + optional slave hex, nothing else.
+// Raw telegram line in ebusd-aligned format: master + optional slave,
+// CRC bytes stripped (views hold NN + data + CRC, no ACKs; only complete
+// valid telegrams reach here, so dropping the trailing byte is exact).
 // (Timestamp/level prefix is added by the logger itself.)
 void SystemMonitor::logRawTelegram(ebus::ByteView master, ebus::ByteView slave,
                                    uint32_t session_id, uint16_t poll_id) {
@@ -263,6 +265,9 @@ void SystemMonitor::logRawTelegram(ebus::ByteView master, ebus::ByteView slave,
   const char* end_buf = buf + sizeof(buf);
 
   static constexpr char hex_chars[] = "0123456789abcdef";
+  auto stripCrc = [](ebus::ByteView v) {
+    return ebus::ByteView(v.data(), v.empty() ? 0 : v.size() - 1);
+  };
   auto appendHex = [&](ebus::ByteView data) {
     for (uint8_t b : data) {
       if (p + 2 >= end_buf) break;
@@ -271,9 +276,14 @@ void SystemMonitor::logRawTelegram(ebus::ByteView master, ebus::ByteView slave,
     }
   };
 
-  appendHex(master);
+  appendHex(stripCrc(master));
+  slave = stripCrc(slave);
   if (!slave.empty()) {
-    if (p < end_buf - 1) *p++ = ' ';
+    if (p < end_buf - 3) {
+      *p++ = ' ';
+      *p++ = '/';
+      *p++ = ' ';
+    }
     appendHex(slave);
   }
 
