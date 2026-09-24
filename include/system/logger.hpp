@@ -15,8 +15,8 @@
 namespace {  // Consider reducing these if memory is extremely tight
 // Maximum number of log entries to keep in memory (static ring, .bss:
 // entries * 768 B — the print queue below stays small because it is
-// heap-backed). Sized to hold roughly one ebusd scan window now that
-// every valid telegram logs a line. Overridable per profile.
+// heap-backed). Sized to hold roughly one scan window now that every valid
+// telegram logs a line. Overridable per profile.
 #ifndef LOGGER_MAX_ENTRIES
 inline constexpr size_t max_entries = 10;
 #else
