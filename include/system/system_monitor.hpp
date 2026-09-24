@@ -40,7 +40,7 @@ class SystemMonitor {
   // Copies up to capacity trend samples (oldest first), returns count.
   size_t fetchHeapTrend(HeapSample* out, size_t capacity) const;
 
-  TaskHandle_t task_handle();
+  TaskHandle_t task_handle() const;
 
   bool begin();
   void stop();
@@ -49,14 +49,14 @@ class SystemMonitor {
   void enqueueProtocolInfo(const ebus::ProtocolInfo& info);
 
   size_t getLogQueueSize();
-  size_t getLogQueueCapacity();
-  size_t getLogQueueHighWatermark();
+  size_t getLogQueueCapacity() const;
+  static size_t getLogQueueHighWatermark();
 
   size_t getProtocolQueueSize();
-  size_t getProtocolQueueCapacity();
-  size_t getProtocolQueueHighWatermark();
+  size_t getProtocolQueueCapacity() const;
+  static size_t getProtocolQueueHighWatermark();
 
-  void getSocketStatus(int& detected, int& connected);
+  static void getSocketStatus(int& detected, int& connected);
 
  private:
   static void taskEntry(void* arg);

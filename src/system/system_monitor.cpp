@@ -50,7 +50,7 @@ static StaticQueue_t protocol_queue_cb;
 
 }  // namespace
 
-TaskHandle_t SystemMonitor::task_handle() { return task_handle_; }
+TaskHandle_t SystemMonitor::task_handle() const { return task_handle_; }
 
 bool SystemMonitor::begin() {
   status_mux_ = portMUX_INITIALIZER_UNLOCKED;
@@ -127,7 +127,7 @@ size_t SystemMonitor::getLogQueueSize() {
   return log_queue_ ? uxQueueMessagesWaiting(log_queue_) : 0;
 }
 
-size_t SystemMonitor::getLogQueueCapacity() {
+size_t SystemMonitor::getLogQueueCapacity() const {
   return log_queue_ ? log_queue_size : 0;
 }
 
@@ -137,7 +137,7 @@ size_t SystemMonitor::getProtocolQueueSize() {
   return protocol_queue_ ? uxQueueMessagesWaiting(protocol_queue_) : 0;
 }
 
-size_t SystemMonitor::getProtocolQueueCapacity() {
+size_t SystemMonitor::getProtocolQueueCapacity() const {
   return protocol_queue_ ? protocol_queue_size : 0;
 }
 
