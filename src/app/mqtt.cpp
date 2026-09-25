@@ -205,6 +205,16 @@ void Mqtt::enqueueOutgoing(const OutgoingAction& action) {
       instance_->outgoing_queue_ == nullptr)
     return;
 
+  // HA-style silent skip: value paths (Data/Update/Error) are high-rate and
+  // refresh cyclically, so queuing them while disconnected only produces
+  // failed publishes (and evicts queued work). Lifecycle types
+  // (Discovery/Components/Ha*) still queue — HaConnected is enqueued from
+  // the CONNECTED handler itself.
+  if (!instance_->connected_ && (action.type == OutgoingActionType::Data ||
+                                 action.type == OutgoingActionType::Update ||
+                                 action.type == OutgoingActionType::Error))
+    return;
+
   if (xQueueSend(instance_->outgoing_queue_, &action, 0) != pdPASS) {
     // Mimic CircularBuffer behavior: drop oldest to make room for new
     OutgoingAction dummy;
