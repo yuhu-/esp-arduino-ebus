@@ -43,8 +43,12 @@ struct OutgoingAction {
     ebus::FixedString<32> id;          // for Data
     ebus::FixedString<64> key;         // for Update
   };
-  ebus::StaticSequence<64> master;  // for Data (bitwise-copy safe)
-  ebus::StaticSequence<64> slave;   // for Data (bitwise-copy safe)
+  // Per-side telegram views (CRC/ACK excluded) peak at 21/17 bytes;
+  // model_capacity matches ErrorEntry/ProtocolEvent holding the same views.
+  ebus::StaticSequence<ebus::detail::SequenceLimits::model_capacity>
+      master;  // for Data (bitwise-copy safe)
+  ebus::StaticSequence<ebus::detail::SequenceLimits::model_capacity>
+      slave;  // for Data (bitwise-copy safe)
 
   OutgoingAction()
       : command(nullptr),

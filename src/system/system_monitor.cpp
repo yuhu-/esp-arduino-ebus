@@ -12,6 +12,7 @@
 #include <cstring>
 #include <ebus/address.hpp>
 #include <ebus/detail/json_writer.hpp>
+#include <ebus/detail/protocol_limits.hpp>
 
 #include "app/app_limits.hpp"
 #include "app/command_manager.hpp"
@@ -30,16 +31,20 @@ struct LogRequestItem {
   // as-is (master hex + optional slave hex), whether or not a configured
   // command matches it.
   uint8_t key_id = 0;
-  ebus::StaticSequence<64> master;
-  ebus::StaticSequence<64> slave;
+  // Per-side views (CRC/ACK excluded) peak at 21/17 bytes; model_capacity
+  // (24) matches ErrorEntry/ProtocolEvent holding the same views.
+  ebus::StaticSequence<ebus::detail::SequenceLimits::model_capacity> master;
+  ebus::StaticSequence<ebus::detail::SequenceLimits::model_capacity> slave;
   uint32_t session_id = 0;
   uint16_t poll_id = 0;
 };
 
 struct ProtocolInfoItem {
   ebus::ProtocolInfo info;
-  ebus::StaticSequence<64> master;
-  ebus::StaticSequence<64> slave;
+  // Per-side views (CRC/ACK excluded) peak at 21/17 bytes; model_capacity
+  // (24) matches ErrorEntry/ProtocolEvent holding the same views.
+  ebus::StaticSequence<ebus::detail::SequenceLimits::model_capacity> master;
+  ebus::StaticSequence<ebus::detail::SequenceLimits::model_capacity> slave;
 };
 
 #if EBUS_BUS_TAP
