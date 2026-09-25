@@ -4,6 +4,7 @@
 #include <freertos/task.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 
 #include "config/app_config_loader.hpp"
@@ -166,7 +167,10 @@ bool App::initServices() {
       });
 #endif
 
+#if EBUS_ENABLE_OTA
   esp_ota_manager_.begin();
+#endif
+
   enableTX();
 
 #if defined(EBUS_INTERNAL)
@@ -277,9 +281,21 @@ bool App::initServices() {
         monitor_.enqueueProtocolInfo(info);
       });
 
-  // getEbusController().setTraceCallback([](const ebus::BusEventInfo& info) {
-  //   logger.debug(ebus::toJson(info, 256));
-  // });
+#if EBUS_BUS_TAP
+  // Bus byte tap for captures: every bus event as POD into the monitor
+  // ring (SystemMonitor::tapBusByte), formatted on /api/v1/app/tap fetch.
+  // Never format, allocate or log in this callback — it runs on the
+  // reactor thread at bus rate (the toJson variant historically
+  // overflowed task stacks). Enable capture builds with -DEBUS_BUS_TAP=1
+  // (default off: ~250 lines/s would drown serial + the log ring).
+  getEbusController().setTraceCallback([this](const ebus::BusEventInfo& info) {
+    const uint64_t boot_us = static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            info.timestamp.time_since_epoch())
+            .count());
+    monitor_.tapBusByte(boot_us, info.byte);
+  });
+#endif
 
   startEbus();  // This will start the ebus controller
 
@@ -289,7 +305,9 @@ bool App::initServices() {
 
   monitor_.begin();
   DeviceStatus::setMonitor(&monitor_);
+#if EBUS_ENABLE_OTA
   DeviceStatus::setEspOtaManager(&esp_ota_manager_);
+#endif
   DeviceStatus::setMqtt(&mqtt_);
   DeviceStatus::setMqttHa(&mqtt_ha_);
 
@@ -386,7 +404,9 @@ void App::initHttp() {
   upgrade_manager_.begin();
   SetupHttpFallbackHandlers();
   upgrade_manager_.setPreUpgradeHook([this]() { stop(); });
+#if EBUS_ENABLE_OTA
   esp_ota_manager_.setPreUpgradeHook([this]() { stop(); });
+#endif
 }
 
 bool App::startTasks() {
@@ -425,9 +445,8 @@ void App::logConfig() const {
       (int)c.network.wifi_bssid.size(), c.network.wifi_bssid.c_str(),
       c.network.static_ip_enabled ? "true" : "false",
       (int)c.network.ip_address.size(), c.network.ip_address.c_str(),
-      c.mqtt.enabled ? "true" : "false",
-      (int)c.mqtt.server.size(), c.mqtt.server.c_str(),
-      (int)c.mqtt.user.size(), c.mqtt.user.c_str(),
+      c.mqtt.enabled ? "true" : "false", (int)c.mqtt.server.size(),
+      c.mqtt.server.c_str(), (int)c.mqtt.user.size(), c.mqtt.user.c_str(),
       c.mqtt.pass.empty() ? "(empty)" : "(set)",
       c.mqtt_ha.enabled ? "true" : "false", (unsigned)c.pwm.value,
       (int)c.bus.address.size(), c.bus.address.c_str(),

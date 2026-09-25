@@ -7,6 +7,10 @@
 #include <functional>
 #include <string>
 
+#ifndef EBUS_ENABLE_OTA
+#define EBUS_ENABLE_OTA 1
+#endif
+
 class EspOtaManager {
  public:
   using PreUpgradeHook = std::function<void(void)>;

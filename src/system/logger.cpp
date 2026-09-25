@@ -17,7 +17,7 @@ Logger::Logger(size_t maxEntries)
       capacity_(maxEntries > 0 && maxEntries <= max_entries ? maxEntries
                                                             : max_entries),
       mux_(portMUX_INITIALIZER_UNLOCKED),
-      print_queue_(xQueueCreate(print_queue_entries, print_msg_length)),
+      print_queue_(xQueueCreate(print_queue_entries, sizeof(LogPrintItem))),
       print_task_(nullptr) {
   if (print_queue_ != nullptr) {
     xTaskCreate(Logger::printTaskEntry, "logger",
@@ -144,11 +144,19 @@ bool Logger::currentMillisTimeRelation(uint64_t& currentMillis,
 void Logger::log(LogLevel level, std::string_view message, bool is_json,
                  uint32_t session_id, uint16_t poll_id) {
   if (print_queue_ != nullptr && print_task_ != nullptr) {
-    char msg[print_msg_length]{};
-    size_t len = std::min(message.size(), sizeof(msg) - 1);
-    std::memcpy(msg, message.data(), len);
-    msg[len] = '\0';
-    if (xQueueSend(print_queue_, msg, 0) == pdPASS) {
+    LogPrintItem item{};
+    item.boot_ms = static_cast<uint64_t>(esp_timer_get_time() / 1000ULL);
+    struct timeval tv;
+    if (gettimeofday(&tv, nullptr) == 0) {
+      const int64_t wall =
+          static_cast<int64_t>(tv.tv_sec) * 1000LL + tv.tv_usec / 1000LL;
+      constexpr int64_t min_valid_epoch_ms = 1577836800000LL;  // 2020-01-01
+      if (wall >= min_valid_epoch_ms) item.wall_ms = wall;
+    }
+    size_t len = std::min(message.size(), sizeof(item.msg) - 1);
+    std::memcpy(item.msg, message.data(), len);
+    item.msg[len] = '\0';
+    if (xQueueSend(print_queue_, &item, 0) == pdPASS) {
       ebus::updateMaxAtomic(max_queue_size_,
                             uxQueueMessagesWaiting(print_queue_));
     } else {
@@ -185,9 +193,31 @@ void Logger::printTaskEntry(void* arg) {
 
 void Logger::printTaskLoop() {
   while (true) {
-    char msg[print_msg_length]{};
-    if (xQueueReceive(print_queue_, msg, portMAX_DELAY) == pdTRUE) {
-      printf("%s\n", msg);
+    LogPrintItem item{};
+    if (xQueueReceive(print_queue_, &item, portMAX_DELAY) == pdTRUE) {
+      // Timestamp and message printed as separate args: no truncation
+      // analysis on the (already bounded) message buffer. Wall part via
+      // strftime (immune to -Wformat-truncation); numeric parts use
+      // provably-bounded ranges only.
+      char ts[26]{};
+      if (item.wall_ms > 0) {
+        // ebusd-style wall timestamp (TZ from SNTP config): console lines
+        // diff directly against ebusd/ebusread logs.
+        const time_t sec = static_cast<time_t>(item.wall_ms / 1000);
+        struct tm tm;
+        localtime_r(&sec, &tm);
+        const size_t n = strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", &tm);
+        if (n > 0 && n + 5 < sizeof(ts)) {
+          std::snprintf(ts + n, sizeof(ts) - n, ".%03d",
+                        static_cast<int>(item.wall_ms % 1000));
+        }
+      } else {
+        // No wall clock yet (SNTP unsynced): boot-relative seconds.
+        std::snprintf(ts, sizeof(ts), "[+%lu.%03u]",
+                      static_cast<unsigned long>(item.boot_ms / 1000ULL),
+                      static_cast<unsigned>(item.boot_ms % 1000ULL));
+      }
+      printf("%s %s\n", ts, item.msg);
     }
   }
 }

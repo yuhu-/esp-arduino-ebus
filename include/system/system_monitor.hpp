@@ -14,6 +14,13 @@
 #include "app/command.hpp"
 #include "ebus/callbacks.hpp"
 
+// Bus byte tap (every bus event to console for captures): off by default,
+// enable capture builds with -DEBUS_BUS_TAP=1. The push path is POD-only
+// and safe at bus rate; formatting/logging happens on the monitor task.
+#ifndef EBUS_BUS_TAP
+#define EBUS_BUS_TAP 0
+#endif
+
 // System health monitor: drains log/protocol queues fed by ebus library
 // threads and reports heap, socket and task telemetry.
 // Instance owned by App; all methods are thread-safe (called from the
@@ -47,6 +54,14 @@ class SystemMonitor {
 
   void enqueueLogRequest(std::string_view key);
   void enqueueProtocolInfo(const ebus::ProtocolInfo& info);
+
+  // Bus byte tap: reactor thread pushes (POD only), fetched as JSON via
+  // /api/v1/app/tap. Dedicated store: tap traffic must never churn the
+  // shared log ring or serial (250 lines/s evicts session lines).
+  // No-op unless EBUS_BUS_TAP=1.
+  void tapBusByte(uint64_t boot_us, uint8_t byte);
+  void fetchTap(const ebus::JsonChunkVisitor& visitor,
+                uint64_t sinceWallMs) const;
 
   size_t getLogQueueSize();
   size_t getLogQueueCapacity() const;

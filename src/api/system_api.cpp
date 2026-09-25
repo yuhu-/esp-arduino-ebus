@@ -147,8 +147,10 @@ esp_err_t SystemApi::handleTasks(httpd_req_t* req) {
       addThread("logger", logger.getTaskHandle(),
                 app::limits::Task::logger_stack);
       addThread("dns", getCaptiveDnsTaskHandle(), app::limits::Task::dns_stack);
+#if EBUS_ENABLE_OTA
       addThread("espota", DeviceStatus::espOtaManager().getTaskHandle(),
                 app::limits::Task::espota_stack);
+#endif
       addThread("status_led", WifiNetworkManager::getStatusLedTaskHandle(),
                 app::limits::Task::status_led_stack);
       addThread("system_monitor", DeviceStatus::monitor().task_handle(),

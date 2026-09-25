@@ -33,6 +33,19 @@ inline constexpr size_t print_queue_entries = 5;
 inline constexpr size_t print_msg_length = 192;
 }  // namespace
 
+// Print-queue item: message plus enqueue-time stamps. The stamps are
+// captured in log(), not at print time — the queue can lag behind the
+// bus (drops observed), and correlating with ebusd/ebusread logs needs
+// the emission instant, not the print instant.
+struct LogPrintItem {
+  // Wall clock (epoch ms) for ebusd-style timestamps; 0 = SNTP not (yet)
+  // synced, fall back to boot_ms.
+  int64_t wall_ms = 0;
+  // Monotonic boot clock (ms), always valid.
+  uint64_t boot_ms = 0;
+  char msg[print_msg_length]{};
+};
+
 class Logger {
  public:
   explicit Logger(size_t maxEntries = max_entries);

@@ -20,6 +20,7 @@ class LogsApi {
   static esp_err_t handleLogsPage(httpd_req_t* req);
   static esp_err_t handleLogs(httpd_req_t* req);
   static esp_err_t handleLogsTimeRelation(httpd_req_t* req);
+  static esp_err_t handleTap(httpd_req_t* req);
 };
 
 #endif

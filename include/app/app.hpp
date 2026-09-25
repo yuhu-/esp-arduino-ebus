@@ -50,7 +50,9 @@ class App {
   static App* instance_;
 
   UpgradeManager upgrade_manager_;
+#if EBUS_ENABLE_OTA
   EspOtaManager esp_ota_manager_;
+#endif
 #if defined(EBUS_INTERNAL)
   Mqtt mqtt_;
   MqttHA mqtt_ha_;

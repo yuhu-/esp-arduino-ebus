@@ -7,8 +7,11 @@
 #include <freertos/task.h>
 #include <lwip/sockets.h>
 
+#include <atomic>
 #include <cstdio>
 #include <cstring>
+#include <ebus/address.hpp>
+#include <ebus/detail/json_writer.hpp>
 
 #include "app/app_limits.hpp"
 #include "app/command_manager.hpp"
@@ -38,6 +41,23 @@ struct ProtocolInfoItem {
   ebus::StaticSequence<64> master;
   ebus::StaticSequence<64> slave;
 };
+
+#if EBUS_BUS_TAP
+// Byte-tap store: reactor thread (trace callback) pushes, /api/v1/app/tap
+// formats on fetch. Dedicated store (never the shared log ring/serial —
+// tap rate would evict session lines). Static .bss (512 x 16 B = 8 KB);
+// drops counted, never blocks the bus path.
+struct TapItem {
+  uint64_t boot_us = 0;
+  uint8_t byte = 0;
+};
+constexpr size_t tap_capacity = 512;
+TapItem tap_ring[tap_capacity];
+size_t tap_head = 0;
+size_t tap_tail = 0;
+portMUX_TYPE tap_mux = portMUX_INITIALIZER_UNLOCKED;
+std::atomic<uint32_t> tap_drops{0};
+#endif
 
 // Static queue storage (shared, .bss): kept out of the instance on purpose —
 // SystemMonitor instances live on constrained task stacks, and a second
@@ -161,6 +181,104 @@ void SystemMonitor::getSocketStatus(int& detected, int& connected) {
       connected++;
     }
   }
+}
+
+void SystemMonitor::tapBusByte(uint64_t boot_us, uint8_t byte) {
+#if EBUS_BUS_TAP
+  // Pure push: no notify (nothing drains eagerly; /api/v1/app/tap reads
+  // the store on demand). Keeps bus-rate pushes free of task wakeups.
+  portENTER_CRITICAL(&tap_mux);
+  const size_t next = (tap_head + 1) % tap_capacity;
+  if (next == tap_tail) {
+    tap_drops.fetch_add(1, std::memory_order_relaxed);
+  } else {
+    tap_ring[tap_head].boot_us = boot_us;
+    tap_ring[tap_head].byte = byte;
+    tap_head = next;
+  }
+  portEXIT_CRITICAL(&tap_mux);
+#else
+  (void)boot_us;
+  (void)byte;
+#endif
+}
+
+// Formats the tap store as JSON, chunked straight to the HTTP socket:
+// {"tap":[{t:<wall-ms>,b:"xx"},...],"dropped":N,"capacity":512}.
+// Wall offset sampled once per fetch. Reads copy out in small critical
+// sections (never hold a critical across formatting: ms of disabled
+// interrupts would break bus timing).
+void SystemMonitor::fetchTap(const ebus::JsonChunkVisitor& visitor,
+                             uint64_t sinceWallMs) const {
+#if EBUS_BUS_TAP
+  int64_t offset_ms = 0;
+  bool have_wall = false;
+  {
+    struct timeval tv;
+    if (gettimeofday(&tv, nullptr) == 0) {
+      const int64_t wall =
+          static_cast<int64_t>(tv.tv_sec) * 1000LL + tv.tv_usec / 1000LL;
+      constexpr int64_t min_valid_epoch_ms = 1577836800000LL;  // 2020-01-01
+      if (wall >= min_valid_epoch_ms) {
+        offset_ms = wall - static_cast<int64_t>(esp_timer_get_time() / 1000ULL);
+        have_wall = true;
+      }
+    }
+  }
+
+  size_t head = 0;
+  size_t tail = 0;
+  portENTER_CRITICAL(&tap_mux);
+  head = tap_head;
+  tail = tap_tail;
+  portEXIT_CRITICAL(&tap_mux);
+  size_t count = (head + tap_capacity - tail) % tap_capacity;
+  size_t idx = tail;
+
+  static constexpr char hex_chars[] = "0123456789abcdef";
+  ebus::detail::JsonWriter writer(visitor);
+  auto root = writer.objectScope();
+  writer.appendKey("tap");
+  {
+    auto array = writer.arrayScope();
+    TapItem chunk[64];
+    while (count > 0) {
+      size_t n = count < 64 ? count : 64;
+      portENTER_CRITICAL(&tap_mux);
+      for (size_t i = 0; i < n; ++i) {
+        chunk[i] = tap_ring[(idx + i) % tap_capacity];
+      }
+      portEXIT_CRITICAL(&tap_mux);
+      for (size_t i = 0; i < n; ++i) {
+        // Without wall clock there is nothing to filter against: emit.
+        const uint64_t wall = have_wall ? chunk[i].boot_us / 1000ULL +
+                                              static_cast<uint64_t>(offset_ms)
+                                        : chunk[i].boot_us / 1000ULL;
+        if (!have_wall || wall >= sinceWallMs) {
+          char hex[3] = {hex_chars[chunk[i].byte >> 4],
+                         hex_chars[chunk[i].byte & 0xf], '\0'};
+          auto item = writer.objectScope();
+          writer.writeField("t", wall);
+          writer.writeField("b", hex);
+        }
+      }
+      idx = (idx + n) % tap_capacity;
+      count -= n;
+    }
+  }
+  writer.writeField("dropped", tap_drops.load(std::memory_order_relaxed));
+  writer.writeField("capacity", tap_capacity);
+#else
+  (void)sinceWallMs;
+  ebus::detail::JsonWriter writer(visitor);
+  auto root = writer.objectScope();
+  writer.appendKey("tap");
+  {
+    auto array = writer.arrayScope();
+  }
+  writer.writeField("dropped", 0);
+  writer.writeField("capacity", 0);
+#endif
 }
 
 void SystemMonitor::taskEntry(void* arg) {

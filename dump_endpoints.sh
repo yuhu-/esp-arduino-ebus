@@ -30,6 +30,7 @@ ENDPOINTS = [
     "api/v1/metrics",
     "api/v1/app/values",
     "api/v1/app/logs",
+    "api/v1/app/tap",
     "api/v1/app/config",
 ]
 
