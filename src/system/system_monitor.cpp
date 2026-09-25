@@ -232,15 +232,14 @@ void SystemMonitor::fetchTap(const ebus::JsonChunkVisitor& visitor,
   head = tap_head;
   tail = tap_tail;
   portEXIT_CRITICAL(&tap_mux);
-  size_t count = (head + tap_capacity - tail) % tap_capacity;
-  size_t idx = tail;
-
   static constexpr char hex_chars[] = "0123456789abcdef";
   ebus::detail::JsonWriter writer(visitor);
   auto root = writer.objectScope();
   writer.appendKey("tap");
   {
     auto array = writer.arrayScope();
+    size_t count = (head + tap_capacity - tail) % tap_capacity;
+    size_t idx = tail;
     TapItem chunk[64];
     while (count > 0) {
       size_t n = count < 64 ? count : 64;
