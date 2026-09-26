@@ -24,6 +24,7 @@ curl -X POST \
 ## Command set upload
 
 ```bash
+# Command set upload (commands.json below is just an example — use your own)
 curl -X POST \
   -H "Content-Type: application/json" \
   --data-binary @commands.json \
