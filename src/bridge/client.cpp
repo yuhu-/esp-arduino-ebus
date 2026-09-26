@@ -1,6 +1,6 @@
 #if !defined(EBUS_INTERNAL)
 
-#include "legacy/client.hpp"
+#include "bridge/client.hpp"
 
 #include <fcntl.h>
 #include <freertos/FreeRTOS.h>
@@ -12,7 +12,7 @@
 #include <cstring>
 
 #include "app/app_limits.hpp"
-#include "legacy/bus_type.hpp"
+#include "bridge/bus_type.hpp"
 #include "main.hpp"
 
 #define M1 0b11000000

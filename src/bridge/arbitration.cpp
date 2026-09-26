@@ -1,11 +1,11 @@
 #if !defined(EBUS_INTERNAL)
 
-#include "legacy/arbitration.hpp"
+#include "bridge/arbitration.hpp"
 
 #include <esp_rom_sys.h>
 #include <esp_timer.h>
 
-#include "legacy/bus_type.hpp"
+#include "bridge/bus_type.hpp"
 
 // arbitration is timing sensitive. avoid communicating with WifiClient during
 // arbitration according

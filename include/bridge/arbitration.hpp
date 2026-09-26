@@ -2,7 +2,7 @@
 
 #if !defined(EBUS_INTERNAL)
 
-#include "legacy/bus_state.hpp"
+#include "bridge/bus_state.hpp"
 
 // Implements the arbitration algorithm. Uses the state of the bus to decide
 // what to do. Typical usage:

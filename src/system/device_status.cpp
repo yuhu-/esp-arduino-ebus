@@ -27,7 +27,7 @@
 #include "system/system_monitor.hpp"
 
 #if !defined(EBUS_INTERNAL)
-#include "legacy/bus_type.hpp"
+#include "bridge/bus_type.hpp"
 #else
 #include "app/command_manager.hpp"
 #include "app/cron.hpp"

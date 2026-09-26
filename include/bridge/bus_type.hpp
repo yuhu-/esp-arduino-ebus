@@ -5,8 +5,8 @@
 #include <cstdint>
 #include <queue>
 
-#include "legacy/arbitration.hpp"
-#include "legacy/bus_state.hpp"
+#include "bridge/arbitration.hpp"
+#include "bridge/bus_state.hpp"
 
 enum responses {
   RESETTED = 0x0,

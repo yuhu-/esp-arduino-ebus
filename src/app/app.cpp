@@ -32,8 +32,8 @@
 #include "app/mqtt_ha.hpp"
 #include "system/system_monitor.hpp"
 #else
-#include "legacy/bus_type.hpp"
-#include "legacy/client.hpp"
+#include "bridge/bus_type.hpp"
+#include "bridge/client.hpp"
 #endif
 
 App* App::instance_ = nullptr;

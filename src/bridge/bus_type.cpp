@@ -1,6 +1,6 @@
 #if !defined(EBUS_INTERNAL)
 
-#include "legacy/bus_type.hpp"
+#include "bridge/bus_type.hpp"
 
 #include <driver/uart.h>
 #include <esp_rom_sys.h>
