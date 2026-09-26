@@ -408,7 +408,10 @@ esp_err_t UpgradeManager::handleHttpUpgrade(httpd_req_t* req) {
   ebus::detail::JsonReader reader(sr.jsonReader().remaining());
 
   std::string url;
-  if (reader.findKey("url")) {
+  // findKey matches current-level keys: consume the opening brace first
+  // (a fresh reader positions depth before it and never matches).
+  if (reader.next() == ebus::detail::JsonReader::Token::object_start &&
+      reader.findKey("url")) {
     reader.next();
     url = std::string(reader.value());
   }

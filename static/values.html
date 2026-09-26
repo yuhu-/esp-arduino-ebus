@@ -12,12 +12,8 @@
     <h1>Values</h1>
     <div class="controls">
         <button id="btnHome">Home</button>
-        <button id="btnValues">Values</button>
-        <button id="btnPause">Resume</button>
-        <button id="btnDecreaseInterval">-</button>
-        <span id="pollIntervalLabel">?s</span>
-        <button id="btnIncreaseInterval">+</button>
         <span id="status">...</span>
+        <button id="btnRefresh" style="margin-left:auto">Refresh</button>
     </div>
     <table>
         <thead id="valuesTableHeader"></thead>
@@ -25,13 +21,9 @@
     </table>
     <script src="common.js"></script>
     <script>
-        let pollInterval = 10;
-        let pollingTimeout;
-        // Auto-poll starts paused: single initial load only, refresh via
-        // Values button or Resume. Background polling kept the bus thread
-        // under permanent HTTP/TCP load and could trigger echo storms.
-        let isPaused = true;
-
+        // No auto-poll: single load on open, Refresh on demand (Devices
+        // pattern). Background polling kept the bus thread under permanent
+        // HTTP/TCP load.
         function handleValues() {
             fetchJson('/api/v1/app/values', data => renderValuesTable(data), 'Fetching values...');
         }
@@ -67,10 +59,36 @@
 
             const cols = ['key', 'name', 'value', 'unit', 'age'];
 
+            // Multi-field commands arrive as one row per field (backend
+            // flattened): row identity is key+field, but Read polls the
+            // whole telegram — only the first row per key carries it.
+            const seenKeys = new Set();
+            const firstOfKey = new Set();
+            data.forEach(item => {
+                const rid = (item.key || '') + '\x1f' + (item.field || '');
+                if (!seenKeys.has(item.key)) {
+                    seenKeys.add(item.key);
+                    firstOfKey.add(rid);
+                }
+            });
+
             // Update or create rows
             data.forEach(item => {
-                const targetKey = item.key || item.name || '';
-                let tr = existingRows[targetKey];
+                const cmdKey = item.key || '';
+                const rowId = cmdKey + '\x1f' + (item.field || '');
+                const wantRead = firstOfKey.has(rowId);
+                let tr = existingRows[rowId];
+
+                if (tr) {
+                    // Read-button placement may have changed (single <->
+                    // multi field): rebuild the row when it mismatches.
+                    const hasRead = !!tr.querySelector('button[data-act="read"]');
+                    if (wantRead !== hasRead) {
+                        tr.remove();
+                        delete existingRows[rowId];
+                        tr = null;
+                    }
+                }
 
                 if (tr) {
                     // Update existing row - only update display cells, not input
@@ -83,8 +101,8 @@
 
                     // Update button states (write, active) but keep input focus and value
                     const input = tr.querySelector('input[type="text"]');
-                    const btnWrite = tr.querySelector('button:nth-of-type(1)');
-                    const btnRead = tr.querySelector('button:nth-of-type(2)');
+                    const btnWrite = tr.querySelector('button[data-act="write"]');
+                    const btnRead = tr.querySelector('button[data-act="read"]');
 
                     if (input) input.disabled = !item.write;
                     if (btnWrite) btnWrite.disabled = !item.write;
@@ -106,30 +124,35 @@
                     input.style.width = '6rem';
                     input.value = '';
                     input.disabled = !item.write;
-                    input.setAttribute('data-key', targetKey);
+                    input.setAttribute('data-key', rowId);
 
                     const btnWrite = document.createElement('button');
                     btnWrite.textContent = 'Write';
+                    btnWrite.setAttribute('data-act', 'write');
                     btnWrite.disabled = !item.write;
-                    btnWrite.addEventListener('click', () => writeValue(targetKey, input, btnWrite));
+                    btnWrite.addEventListener('click', () => writeValue(cmdKey, input, btnWrite));
 
                     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') btnWrite.click(); });
                     tdActions.appendChild(input);
                     tdActions.appendChild(btnWrite);
 
-                    const btnRead = document.createElement('button');
-                    btnRead.textContent = 'Read';
-                    btnRead.disabled = !item.active;
-                    btnRead.addEventListener('click', () => readValue(targetKey, btnRead));
-                    tdActions.appendChild(btnRead);
+                    if (wantRead) {
+                        const btnRead = document.createElement('button');
+                        btnRead.textContent = 'Read';
+                        btnRead.setAttribute('data-act', 'read');
+                        btnRead.disabled = !item.active;
+                        btnRead.addEventListener('click', () => readValue(cmdKey, btnRead));
+                        tdActions.appendChild(btnRead);
+                    }
 
                     tr.appendChild(tdActions);
                     tbody.appendChild(tr);
+                    existingRows[rowId] = tr;
                 }
             });
 
             // Remove rows that are no longer in data
-            const dataKeys = new Set(data.map(item => item.key || item.name || ''));
+            const dataKeys = new Set(data.map(item => (item.key || '') + '\x1f' + (item.field || '')));
             tbody.querySelectorAll('tr').forEach(tr => {
                 const input = tr.querySelector('input[type="text"]');
                 if (input) {
@@ -193,24 +216,10 @@
         }
 
         document.getElementById('btnHome').addEventListener('click', handleHome);
-        document.getElementById('btnValues').addEventListener('click', handleValues);
-
-        document.getElementById('btnIncreaseInterval').addEventListener('click', () => {
-            changePollInterval(1, 5, 60, 'pollIntervalLabel', handleValues);
-        });
-
-        document.getElementById('btnDecreaseInterval').addEventListener('click', () => {
-            changePollInterval(-1, 5, 60, 'pollIntervalLabel', handleValues);
-        });
-
-        document.getElementById('btnPause').addEventListener('click', () => togglePause('btnPause'));
+        document.getElementById('btnRefresh').addEventListener('click', handleValues);
 
         // Initial load
         handleValues();
-
-        // Setup poll
-        updatePollLabel('pollIntervalLabel', pollInterval);
-        setPollingTimeout(pollInterval, handleValues);
     </script>
 </body>
 

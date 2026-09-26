@@ -306,6 +306,12 @@ void Mqtt::internalPublish(const char* topic, uint8_t qos, bool retain,
                            const char* payload, bool prefix) {
   std::lock_guard<std::recursive_mutex> lock(mqtt_mutex_);
   if (!enabled_ || client_ == nullptr || payload == nullptr) return;
+  // Send-time gate (pairs with the enqueue gate): lifecycle actions
+  // (Discovery/Components/Ha*) still queue while disconnected, and the
+  // drain pops unconditionally — without this, esp_mqtt_client spams
+  // "Losing qos0 data" and every attempt counts as publish_failed.
+  // Silent skip, HA-style; discovery re-runs on every (re)connect.
+  if (!connected_) return;
 
   const char* targetTopic = topic;
   char fullTopic[256];

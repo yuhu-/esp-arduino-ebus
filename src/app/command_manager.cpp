@@ -456,21 +456,49 @@ void CommandManager::fetchValues(const ebus::JsonChunkVisitor& visitor) const {
       const Command* cmd = ordered[i];
       ebus::detail::JsonWriter writer(
           [&frag](std::string_view s) { frag.append(s); });
-      auto scope = writer.objectScope();
-      writer.writeField("key", cmd->getKey());
-      writer.writeField("name", cmd->getName());
+      const uint32_t age =
+          (cmd->getLast() > 0) ? (now - cmd->getLast()) / 1000 : 0;
+      const size_t fields = cmd->getFieldCount();
+      if (fields <= 1) {
+        auto scope = writer.objectScope();
+        writer.writeField("key", cmd->getKey());
+        writer.writeField("name", cmd->getName());
 
-      writer.appendKey("value");
-      cmd->getValueJson(writer);
+        writer.appendKey("value");
+        cmd->getValueJson(writer);
 
-      std::string unit;
-      if (cmd->getFieldCount() > 0) {
-        unit = std::string(cmd->getFieldUnit(0));
+        std::string unit;
+        if (fields > 0) {
+          unit = std::string(cmd->getFieldUnit(0));
+        }
+        writer.writeField("unit", unit);
+        writer.writeField("age", age);
+        writer.writeField("write", cmd->hasWriteCmd());
+        writer.writeField("active", cmd->getActive());
+      } else {
+        // Multi-field: one row per field so dumb renderers (values page)
+        // never see [object Object]. Name carries both sides
+        // ("cmd/field"); Read polls the whole telegram once (see UI: only
+        // the first field row carries the button).
+        for (size_t f = 0; f < fields; ++f) {
+          auto scope = writer.objectScope();
+          writer.writeField("key", cmd->getKey());
+          const char* fn = cmd->getFieldName(f);
+          std::string name =
+              std::string(cmd->getName()) + "/" + (fn && fn[0] ? fn : "value");
+          writer.writeField("name", name);
+          writer.writeField("field", (fn && fn[0] ? fn : "value"));
+
+          writer.appendKey("value");
+          cmd->writeFieldValue(writer, f);
+
+          writer.writeField("unit",
+                            cmd->getFieldUnit(f) ? cmd->getFieldUnit(f) : "");
+          writer.writeField("age", age);
+          writer.writeField("write", cmd->hasWriteCmd());
+          writer.writeField("active", cmd->getActive());
+        }
       }
-      writer.writeField("unit", unit);
-      writer.writeField(
-          "age", (cmd->getLast() > 0) ? (now - cmd->getLast()) / 1000 : 0);
-      writer.writeField("write", cmd->hasWriteCmd());
       more = (i + 1 < commands_.size());
     }
     visitor(frag);

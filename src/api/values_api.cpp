@@ -62,7 +62,10 @@ esp_err_t ValuesApi::handleValuesWrite(httpd_req_t* req) {
   std::string_view body_sv = sr.jsonReader().remaining();
   ebus::detail::JsonReader reader(body_sv);
   std::string key;
-  if (reader.findKey("key") &&
+  // findKey matches current-level keys: consume the opening brace first
+  // (a fresh reader positions depth before it and never matches).
+  if (reader.next() == ebus::detail::JsonReader::Token::object_start &&
+      reader.findKey("key") &&
       reader.next() == ebus::detail::JsonReader::Token::string) {
     key = std::string(reader.value());
   }
@@ -100,7 +103,10 @@ esp_err_t ValuesApi::handleValuesRead(httpd_req_t* req) {
 
   ebus::detail::JsonReader reader(sr.jsonReader().remaining());
   std::string key;
-  if (reader.findKey("key") &&
+  // findKey matches current-level keys: consume the opening brace first
+  // (a fresh reader positions depth before it and never matches).
+  if (reader.next() == ebus::detail::JsonReader::Token::object_start &&
+      reader.findKey("key") &&
       reader.next() == ebus::detail::JsonReader::Token::string) {
     key = std::string(reader.value());
   }
