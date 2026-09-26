@@ -44,7 +44,9 @@ MqttHA* DeviceStatus::mqtt_ha_ = nullptr;
 
 namespace {
 
+#if defined(EBUS_INTERNAL)
 const AppConfig& statusConfig() { return DeviceStatus::config(); }
+#endif
 
 struct StatusInfo {
   static void toJson(ebus::detail::JsonWriter& writer) {

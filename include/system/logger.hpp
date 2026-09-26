@@ -23,8 +23,11 @@ inline constexpr size_t max_entries = 10;
 inline constexpr size_t max_entries = LOGGER_MAX_ENTRIES;
 #endif
 
-// Maximum length of a log message, including null terminator
-inline constexpr size_t max_msg_length = 768;
+// Maximum length of a log message, including null terminator. Longest
+// producer is the WiFi failure slice (~261 chars worst case, bounded by
+// FixedString field sizes); everything else stays below 256. Oversize
+// input is silently clipped (serial already clips at 192).
+inline constexpr size_t max_msg_length = 384;
 // Maximum log message for the print queue
 inline constexpr size_t print_queue_entries = 5;
 // Serial print lines are truncated to this: the ring keeps full text,

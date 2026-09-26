@@ -32,6 +32,7 @@ esp_ip4_addr_t WifiNetworkManager::dns1_{};
 esp_ip4_addr_t WifiNetworkManager::dns2_{};
 uint32_t WifiNetworkManager::lastConnect_ = 0;
 int WifiNetworkManager::reconnectCount_ = 0;
+int WifiNetworkManager::consecutiveFailures_ = 0;
 bool WifiNetworkManager::staConnected_ = false;
 bool WifiNetworkManager::staConfigured_ = false;
 TaskHandle_t WifiNetworkManager::statusLedTaskHandle_ = nullptr;
@@ -233,10 +234,45 @@ void WifiNetworkManager::setStaIpAssignedCallback(
   }
 }
 
+bool WifiNetworkManager::isStaticIpEnabled() {
+  return configManager_ != nullptr &&
+         configManager_->readBool("staticIPEnabled");
+}
+
 wifi_mode_t WifiNetworkManager::getMode() {
   wifi_mode_t mode = WIFI_MODE_NULL;
   if (esp_wifi_get_mode(&mode) != ESP_OK) return WIFI_MODE_NULL;
   return mode;
+}
+
+std::string WifiNetworkManager::getConfiguredIpAddress() {
+  return configManager_ != nullptr
+             ? std::string(configManager_->readString("ipAddress"))
+             : "";
+}
+
+std::string WifiNetworkManager::getConfiguredGateway() {
+  return configManager_ != nullptr
+             ? std::string(configManager_->readString("gateway"))
+             : "";
+}
+
+std::string WifiNetworkManager::getConfiguredNetmask() {
+  return configManager_ != nullptr
+             ? std::string(configManager_->readString("netmask"))
+             : "";
+}
+
+std::string WifiNetworkManager::getConfiguredDns1() {
+  return configManager_ != nullptr
+             ? std::string(configManager_->readString("dns1"))
+             : "";
+}
+
+std::string WifiNetworkManager::getConfiguredDns2() {
+  return configManager_ != nullptr
+             ? std::string(configManager_->readString("dns2"))
+             : "";
 }
 
 bool WifiNetworkManager::getStaIpInfo(esp_netif_ip_info_t* outInfo) {
@@ -318,6 +354,63 @@ std::string_view WifiNetworkManager::macAddress() {
   return buffer;
 }
 
+void WifiNetworkManager::setStatusLedPin(int pin) { statusLedPin_ = pin; }
+
+void WifiNetworkManager::handle_event(
+    void* arg, esp_event_base_t event_base, int32_t event_id,
+    void* event_data) {  // cppcheck-suppress constParameterCallback
+  (void)arg;
+  (void)event_base;
+
+  if (event_id == IP_EVENT_STA_GOT_IP) {
+    if (event_data != nullptr) {
+      const auto* gotIpEvent =
+          static_cast<const ip_event_got_ip_t*>(event_data);
+      ipAddress_ = gotIpEvent->ip_info.ip;
+      gateway_ = gotIpEvent->ip_info.gw;
+      netmask_ = gotIpEvent->ip_info.netmask;
+    }
+
+    if (staIpAssignedCallback_ != nullptr) {
+      std::string ipAddress(ipToString(ipAddress_));
+      if (!ipAddress.empty()) {
+        staIpAssignedCallback_(ipAddress);
+      }
+    }
+
+    staConnected_ = true;
+    consecutiveFailures_ = 0;
+    setStatusLedMode(StatusLedMode::SolidOn);
+    lastConnect_ = (uint32_t)(esp_timer_get_time() / 1000ULL);
+    ++reconnectCount_;
+
+    if (getMode() != WIFI_MODE_STA) {
+      if (esp_wifi_set_mode(WIFI_MODE_STA) == ESP_OK) {
+        logger.info("Switched WiFi mode to STA only");
+      } else {
+        logger.warn("Failed to switch WiFi mode to STA only");
+      }
+    }
+  } else if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
+    staConnected_ = false;
+    setStatusLedMode(StatusLedMode::SlowBlink);
+    logger.warn("STA disconnected, reconnecting");
+
+    if (++consecutiveFailures_ == maxConsecutiveFailures) logWifiSlice();
+
+    if (esp_wifi_set_mode(WIFI_MODE_APSTA) != ESP_OK) {
+      logger.error("Failed to set WiFi mode");
+      return;
+    }
+
+    if (staConfigured_) esp_wifi_connect();
+  }
+}
+
+TaskHandle_t WifiNetworkManager::getStatusLedTaskHandle() {
+  return statusLedTaskHandle_;
+}
+
 void WifiNetworkManager::statusLedTaskEntry(void* arg) {
   (void)arg;
   statusLedTaskLoop();
@@ -365,95 +458,6 @@ void WifiNetworkManager::initStatusLed() {
 
 void WifiNetworkManager::setStatusLedMode(StatusLedMode mode) {
   statusLedMode_ = mode;
-}
-
-void WifiNetworkManager::setStatusLedPin(int pin) { statusLedPin_ = pin; }
-
-bool WifiNetworkManager::isStaticIpEnabled() {
-  return configManager_ != nullptr &&
-         configManager_->readBool("staticIPEnabled");
-}
-
-std::string WifiNetworkManager::getConfiguredIpAddress() {
-  return configManager_ != nullptr
-             ? std::string(configManager_->readString("ipAddress"))
-             : "";
-}
-
-std::string WifiNetworkManager::getConfiguredGateway() {
-  return configManager_ != nullptr
-             ? std::string(configManager_->readString("gateway"))
-             : "";
-}
-
-std::string WifiNetworkManager::getConfiguredNetmask() {
-  return configManager_ != nullptr
-             ? std::string(configManager_->readString("netmask"))
-             : "";
-}
-
-std::string WifiNetworkManager::getConfiguredDns1() {
-  return configManager_ != nullptr
-             ? std::string(configManager_->readString("dns1"))
-             : "";
-}
-
-std::string WifiNetworkManager::getConfiguredDns2() {
-  return configManager_ != nullptr
-             ? std::string(configManager_->readString("dns2"))
-             : "";
-}
-
-void WifiNetworkManager::handle_event(
-    void* arg, esp_event_base_t event_base, int32_t event_id,
-    void* event_data) {  // cppcheck-suppress constParameterCallback
-  (void)arg;
-  (void)event_base;
-
-  if (event_id == IP_EVENT_STA_GOT_IP) {
-    if (event_data != nullptr) {
-      const auto* gotIpEvent =
-          static_cast<const ip_event_got_ip_t*>(event_data);
-      ipAddress_ = gotIpEvent->ip_info.ip;
-      gateway_ = gotIpEvent->ip_info.gw;
-      netmask_ = gotIpEvent->ip_info.netmask;
-    }
-
-    if (staIpAssignedCallback_ != nullptr) {
-      std::string ipAddress(ipToString(ipAddress_));
-      if (!ipAddress.empty()) {
-        staIpAssignedCallback_(ipAddress);
-      }
-    }
-
-    staConnected_ = true;
-    setStatusLedMode(StatusLedMode::SolidOn);
-    lastConnect_ = (uint32_t)(esp_timer_get_time() / 1000ULL);
-    ++reconnectCount_;
-
-    if (getMode() != WIFI_MODE_STA) {
-      if (esp_wifi_set_mode(WIFI_MODE_STA) == ESP_OK) {
-        logger.info("Switched WiFi mode to STA only");
-      } else {
-        logger.warn("Failed to switch WiFi mode to STA only");
-      }
-    }
-  } else if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
-    staConnected_ = false;
-    setStatusLedMode(StatusLedMode::SlowBlink);
-    logger.warn("STA disconnected, reconnecting");
-
-    if (esp_wifi_set_mode(WIFI_MODE_APSTA) != ESP_OK) {
-      logger.error("Failed to set WiFi mode");
-      return;
-    }
-
-    if (staConfigured_) esp_wifi_connect();
-  }
-}
-
-TaskHandle_t WifiNetworkManager::getStatusLedTaskHandle() {
-  return statusLedTaskHandle_;
 }
 
 void WifiNetworkManager::configureStaticIpIfEnabled() {
@@ -526,6 +530,33 @@ void WifiNetworkManager::configureStaticIpIfEnabled() {
   } else {  // Use snprintf for warning message
     logger.warn("Invalid static IP/netmask config, falling back to DHCP");
   }
+}
+
+// Console-only diagnostics (see header): full WiFi slice with password.
+// Worst case ~261 chars (bounded by FixedString sizes), fits max_msg_length.
+void WifiNetworkManager::logWifiSlice() {
+  const std::string ssid =
+      configManager_ != nullptr
+          ? std::string(configManager_->readString("wifiSsid", ""))
+          : std::string("");
+  const std::string pass =
+      configManager_ != nullptr
+          ? std::string(configManager_->readString("wifiPassword", ""))
+          : std::string("");
+  const std::string bssid =
+      configManager_ != nullptr
+          ? std::string(configManager_->readString("wifiBssid", ""))
+          : std::string("");
+  char buf[320];
+  const int n = snprintf(
+      buf, sizeof(buf),
+      "wifi: ssid='%s' pass='%s' bssid='%s' static=%s ip=%s gw=%s mask=%s "
+      "dns1=%s dns2=%s",
+      ssid.c_str(), pass.c_str(), bssid.c_str(),
+      isStaticIpEnabled() ? "true" : "false", getConfiguredIpAddress().c_str(),
+      getConfiguredGateway().c_str(), getConfiguredNetmask().c_str(),
+      getConfiguredDns1().c_str(), getConfiguredDns2().c_str());
+  if (n > 0) logger.warn(buf);
 }
 
 void appendWifiStatus(ebus::detail::JsonWriter& writer) {
